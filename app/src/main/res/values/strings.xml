@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">NSUTrack</string>
+    <string name="login_title">Login to NSUTrack</string>
+    <string name="login_subtitle">ENTER YOUR IMS CREDENTIALS</string>
+    <string name="username_label">Username</string>
+    <string name="password_label">Password</string>
+    <string name="login_button">Login</string>
+    <string name="account_title">Account</string>
+    <string name="close">Close</string>
+    <string name="retry">Retry</string>
+    <string name="attendance">Attendance</string>
+    <string name="schedule">Schedule</string>
+    <string name="home">Home</string>
+    <string name="error_loading_profile">Error loading profile data</string>
+    <string name="no_profile_data">No profile data available</string>
+    <string name="no_classes_today">No classes scheduled for today</string>
+    <string name="personal_information">Personal Information</string>
+    <string name="academic_information">Academic Information</string>
+    <string name="no_attendance_data">No attendance data available</string>
+    <string name="session_expired">Session expired. Please log in again.</string>
+</resources>
