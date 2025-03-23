@@ -400,7 +400,7 @@ fun ScheduleCard(schedule: Schedule, width: Float) {
 }
 
 @Composable
-fun RedLineIndicator(position: Float) {
+internal fun RedLineIndicator(position: Float) {
     val errorColor = MaterialTheme.colorScheme.error
 
     Canvas(

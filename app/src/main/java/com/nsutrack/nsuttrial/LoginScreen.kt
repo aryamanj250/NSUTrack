@@ -1,14 +1,18 @@
 package com.nsutrack.nsuttrial
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
@@ -22,9 +26,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.delay
 import android.util.Log
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.MaterialTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +37,21 @@ fun LoginScreen(
     var password by remember { mutableStateOf("") }
     var isLoaded by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val hapticFeedback = HapticFeedback.getHapticFeedback()
+
+    // Animation states
+    var isUsernameFocused by remember { mutableStateOf(false) }
+    var isPasswordFocused by remember { mutableStateOf(false) }
+
+    val usernameScale by animateFloatAsState(
+        targetValue = if (isUsernameFocused) 1.02f else 1f,
+        label = "Username Scale"
+    )
+
+    val passwordScale by animateFloatAsState(
+        targetValue = if (isPasswordFocused) 1.02f else 1f,
+        label = "Password Scale"
+    )
 
     // Collect state flows more efficiently
     val isLoading by viewModel.isLoading.collectAsState()
@@ -70,6 +86,7 @@ fun LoginScreen(
     LaunchedEffect(key1 = isAttendanceDataLoaded, key2 = isLoggedIn, key3 = sessionId) {
         if (isAttendanceDataLoaded && isLoggedIn && sessionId != null) {
             Log.d("SessionDebug", "Navigation to home with session ID: $sessionId")
+            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.SUCCESS)
             onLoginSuccess()
         }
     }
@@ -116,16 +133,25 @@ fun LoginScreen(
                         .padding(bottom = 16.dp)
                 )
 
+                // Username field with enhanced animation
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
                     label = { Text(stringResource(R.string.username_label)) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = 8.dp)
+                        .scale(usernameScale)
+                        .onFocusChanged {
+                            isUsernameFocused = it.isFocused
+                            if (it.isFocused) {
+                                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                            }
+                        },
                     enabled = isSessionInitialized && !isLoading && !isLoginInProgress,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = MaterialTheme.colorScheme.outline,
@@ -137,6 +163,7 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // Password field with enhanced animation
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
@@ -144,10 +171,18 @@ fun LoginScreen(
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = 8.dp)
+                        .scale(passwordScale)
+                        .onFocusChanged {
+                            isPasswordFocused = it.isFocused
+                            if (it.isFocused) {
+                                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                            }
+                        },
                     enabled = isSessionInitialized && !isLoading && !isLoginInProgress,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = MaterialTheme.colorScheme.outline,
@@ -159,8 +194,10 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
+                // Login button with enhanced feedback
                 Button(
                     onClick = {
+                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
                         focusManager.clearFocus()
                         viewModel.login(username, password)
                     },
@@ -168,11 +205,16 @@ fun LoginScreen(
                         .fillMaxWidth()
                         .height(56.dp),
                     enabled = isSessionInitialized && username.isNotEmpty() && password.isNotEmpty() && !isLoading && !isLoginInProgress,
+                    shape = RoundedCornerShape(28.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                         disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                         disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 4.dp,
+                        pressedElevation = 0.dp
                     )
                 ) {
                     if (isLoading || isLoginInProgress) {
@@ -184,18 +226,55 @@ fun LoginScreen(
                     } else {
                         Text(
                             stringResource(R.string.login_button),
-                            fontSize = 18.sp
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
 
-                if (errorMessage.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = errorMessage,
-                        color = MaterialTheme.colorScheme.error,
-                        textAlign = TextAlign.Center
-                    )
+                // Error message with animation
+                AnimatedVisibility(
+                    visible = errorMessage.isNotEmpty(),
+                    enter = fadeIn(animationSpec = tween(300))
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text(
+                            text = errorMessage,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+
+                // Show session initialization state
+                if (!isSessionInitialized && isLoading) {
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Initializing session...",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
         }

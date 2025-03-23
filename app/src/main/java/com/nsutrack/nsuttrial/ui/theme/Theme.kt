@@ -10,116 +10,115 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.nsutrack.nsuttrial.AttendanceViewModel
 
-// Material 3 color scheme for dark theme
-private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryDark,
-    onPrimary = OnPrimaryDark,
-    primaryContainer = Color(0xFF004A77),
-    onPrimaryContainer = Color(0xFFCFE5FF),
+// Updated Material 3 color scheme for dark theme with softer colors
+private val SoftDarkColorScheme = darkColorScheme(
+    primary = Color(0xFF90CAF9),         // Softer blue
+    onPrimary = Color(0xFF0A2340),
+    primaryContainer = Color(0xFF1C3B5A), // Dark blue with reduced intensity
+    onPrimaryContainer = Color(0xFFD6E4FF),
 
-    secondary = SecondaryDark,
-    onSecondary = OnSecondaryDark,
-    secondaryContainer = Color(0xFF384186),
-    onSecondaryContainer = Color(0xFFDEE0FF),
+    secondary = Color(0xFFBBC3FF),       // Softer purple
+    onSecondary = Color(0xFF282747),
+    secondaryContainer = Color(0xFF363B64), // Muted purple container
+    onSecondaryContainer = Color(0xFFE6E0FF),
 
-    tertiary = TertiaryDark,
-    onTertiary = OnTertiaryDark,
-    tertiaryContainer = Color(0xFF004F58),
-    onTertiaryContainer = Color(0xFFAEECFA),
+    tertiary = Color(0xFF9DCCB6),        // Soft teal
+    onTertiary = Color(0xFF173B2D),
+    tertiaryContainer = Color(0xFF1E4B3C), // Muted teal container
+    onTertiaryContainer = Color(0xFFCFF4D9),
 
-    error = ErrorDark,
-    onError = Color(0xFF690005),
-    errorContainer = Color(0xFF93000A),
+    error = Color(0xFFF5B8B8),           // Softer red
+    onError = Color(0xFF5C1A1A),
+    errorContainer = Color(0xFF7A2F2F),  // Muted red container
     onErrorContainer = Color(0xFFFFDAD6),
 
-    background = BackgroundDark,
-    onBackground = OnBackgroundDark,
-    surface = SurfaceDark,
-    onSurface = OnSurfaceDark,
+    background = Color(0xFF121212),      // Dark but not pure black
+    onBackground = Color(0xFFE2E2E6),
+    surface = Color(0xFF1E1E1E),         // Slightly lighter than background
+    onSurface = Color(0xFFE2E2E6),
 
-    surfaceVariant = Color(0xFF41474D),
-    onSurfaceVariant = Color(0xFFC2C7CF),
-    outline = Color(0xFF8C9198),
-    surfaceTint = PrimaryDark
+    surfaceVariant = Color(0xFF323438),  // Slightly lighter than surface
+    onSurfaceVariant = Color(0xFFCDCED2),
+    outline = Color(0xFF8B8D91),
+    surfaceTint = Color(0xFF90CAF9)     // Same as primary
 )
 
-// Material 3 color scheme for light theme
-private val LightColorScheme = lightColorScheme(
-    primary = PrimaryLight,
-    onPrimary = OnPrimaryLight,
-    primaryContainer = Color(0xFFD1E4FF),
-    onPrimaryContainer = Color(0xFF001D36),
+// Updated Material 3 color scheme for light theme with softer colors
+private val SoftLightColorScheme = lightColorScheme(
+    primary = Color(0xFF4285F4),         // Google Blue, but softer
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFDCE4FF), // Very light blue
+    onPrimaryContainer = Color(0xFF0A2463),
 
-    secondary = SecondaryLight,
-    onSecondary = OnSecondaryLight,
-    secondaryContainer = Color(0xFFDEE0FF),
-    onSecondaryContainer = Color(0xFF0B1566),
+    secondary = Color(0xFF7986CB),       // Soft indigo
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFE8EAFF), // Very light indigo
+    onSecondaryContainer = Color(0xFF28316B),
 
-    tertiary = TertiaryLight,
-    onTertiary = OnTertiaryLight,
-    tertiaryContainer = Color(0xFFAEECFA),
-    onTertiaryContainer = Color(0xFF001F24),
+    tertiary = Color(0xFF66BB6A),        // Soft green
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFD8F2D8), // Very light green
+    onTertiaryContainer = Color(0xFF1E3620),
 
-    error = Error,
-    onError = Color.White,
-    errorContainer = Color(0xFFFFDAD6),
+    error = Color(0xFFEF5350),           // Softer red
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFFDAD6),  // Very light red
     onErrorContainer = Color(0xFF410002),
 
-    background = BackgroundLight,
-    onBackground = OnBackgroundLight,
-    surface = SurfaceLight,
-    onSurface = OnSurfaceLight,
+    background = Color(0xFFF8F9FA),      // Off-white
+    onBackground = Color(0xFF1D1B20),
+    surface = Color(0xFFFFFFFF),         // White
+    onSurface = Color(0xFF1D1B20),
 
-    surfaceVariant = Color(0xFFDFE3EB),
-    onSurfaceVariant = Color(0xFF42474E),
-    outline = Color(0xFF73777F),
-    surfaceTint = PrimaryLight
+    surfaceVariant = Color(0xFFF0F0F5),  // Very light gray with blue tint
+    onSurfaceVariant = Color(0xFF494949),
+    outline = Color(0xFFBABDC2),
+    surfaceTint = Color(0xFF4285F4)      // Same as primary
 )
 
 @Composable
 fun NSUTrackTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    viewModel: AttendanceViewModel? = null,
     content: @Composable () -> Unit
 ) {
+    // Use the useDynamicColors preference from ViewModel if available
+    val useDynamicColors by viewModel?.useDynamicColors?.collectAsState() ?: run {
+        androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
+    }
+
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+        useDynamicColors && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        darkTheme -> SoftDarkColorScheme
+        else -> SoftLightColorScheme
     }
 
-    // Update the system bars to match the theme
+    // Apply status bar and navigation bar styling
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
 
             // Set status bar color with improved contrast
-            window.statusBarColor = if (darkTheme) {
-                colorScheme.surface.toArgb()
-            } else {
-                colorScheme.primary.toArgb()
-            }
+            window.statusBarColor = colorScheme.background.toArgb()
 
             // Set the status bar icons to appropriate contrast
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
 
-            // Optional: Set navigation bar color to match theme
-            window.navigationBarColor = if (darkTheme) {
-                colorScheme.surface.toArgb()
-            } else {
-                Color.White.toArgb()
-            }
+            // Set navigation bar color to match theme
+            window.navigationBarColor = colorScheme.background.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
         }
     }

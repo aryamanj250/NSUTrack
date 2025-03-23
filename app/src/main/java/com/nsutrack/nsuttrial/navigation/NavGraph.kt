@@ -1,3 +1,5 @@
+package com.nsutrack.nsuttrial.navigation
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavController
@@ -9,29 +11,44 @@ import android.util.Log
 import com.nsutrack.nsuttrial.AttendanceViewModel
 import com.nsutrack.nsuttrial.LoginScreen
 import com.nsutrack.nsuttrial.HomeScreen
+import com.nsutrack.nsuttrial.ui.CalendarScreen
+import com.nsutrack.nsuttrial.ui.ExamsScreen
+import com.nsutrack.nsuttrial.ui.NoticesScreen
 
 fun NavGraphBuilder.mainGraph(navController: NavController, viewModel: AttendanceViewModel) {
-    composable("login") {
+    composable(Screen.Login.route) {
         Log.d("NavGraph", "Login screen with ViewModel: ${viewModel.hashCode()}")
 
         LoginScreen(
             viewModel = viewModel,
             onLoginSuccess = {
-                navController.navigate("home") {
+                navController.navigate(Screen.Home.route) {
                     // Remove login screen from back stack
-                    popUpTo("login") { inclusive = true }
+                    popUpTo(Screen.Login.route) { inclusive = true }
                 }
             }
         )
     }
 
-    composable("home") {
+    composable(Screen.Home.route) {
         Log.d("NavGraph", "Home screen with ViewModel: ${viewModel.hashCode()}")
 
         HomeScreen(
             navController = navController,
             viewModel = viewModel
         )
+    }
+
+    composable(Screen.Calendar.route) {
+        CalendarScreen(viewModel = viewModel)
+    }
+
+    composable(Screen.Exams.route) {
+        ExamsScreen(viewModel = viewModel)
+    }
+
+    composable(Screen.Notices.route) {
+        NoticesScreen(viewModel = viewModel)
     }
 
     // Keep this for backward compatibility

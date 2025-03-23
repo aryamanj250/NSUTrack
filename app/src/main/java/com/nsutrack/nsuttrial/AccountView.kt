@@ -28,19 +28,21 @@ fun AccountView(
     val profileData by viewModel.profileData.collectAsState()
     val isLoading by viewModel.isProfileLoading.collectAsState()
     val errorMessage by viewModel.profileError.collectAsState()
+    val hapticFeedback = HapticFeedback.getHapticFeedback()
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.8f),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp)
+                    .padding(20.dp)
             ) {
                 // Header
                 Text(
@@ -57,7 +59,9 @@ fun AccountView(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator()
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                     errorMessage != null -> {
@@ -84,7 +88,13 @@ fun AccountView(
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                Button(onClick = { viewModel.fetchProfileData() }) {
+                                Button(
+                                    onClick = {
+                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                        viewModel.fetchProfileData()
+                                    },
+                                    shape = RoundedCornerShape(28.dp)
+                                ) {
                                     Text("Retry")
                                 }
                             }
@@ -102,10 +112,24 @@ fun AccountView(
                                     icon = Icons.Filled.Person
                                 )
 
-                                ProfileRow(label = "Name", value = profileData?.studentName ?: "")
-                                ProfileRow(label = "Student ID", value = profileData?.studentID ?: "")
-                                ProfileRow(label = "Date of birth", value = profileData?.dob ?: "")
-                                ProfileRow(label = "Gender", value = profileData?.gender ?: "")
+                                ElevatedCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    elevation = CardDefaults.elevatedCardElevation(
+                                        defaultElevation = 2.dp
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp)
+                                    ) {
+                                        ProfileRow(label = "Name", value = profileData?.studentName ?: "")
+                                        ProfileRow(label = "Student ID", value = profileData?.studentID ?: "")
+                                        ProfileRow(label = "Date of birth", value = profileData?.dob ?: "")
+                                        ProfileRow(label = "Gender", value = profileData?.gender ?: "")
+                                    }
+                                }
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -114,15 +138,29 @@ fun AccountView(
                                     icon = Icons.Filled.School
                                 )
 
-                                ProfileRow(label = "Degree", value = profileData?.degree ?: "")
-                                ProfileRow(label = "Branch", value = profileData?.branchName ?: "")
+                                ElevatedCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    elevation = CardDefaults.elevatedCardElevation(
+                                        defaultElevation = 2.dp
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp)
+                                    ) {
+                                        ProfileRow(label = "Degree", value = profileData?.degree ?: "")
+                                        ProfileRow(label = "Branch", value = profileData?.branchName ?: "")
 
-                                // Only show specialization if different from branch
-                                if (profileData?.specialization?.uppercase() != profileData?.branchName?.uppercase()) {
-                                    ProfileRow(label = "Specialization", value = profileData?.specialization ?: "")
+                                        // Only show specialization if different from branch
+                                        if (profileData?.specialization?.uppercase() != profileData?.branchName?.uppercase()) {
+                                            ProfileRow(label = "Specialization", value = profileData?.specialization ?: "")
+                                        }
+
+                                        ProfileRow(label = "Section", value = profileData?.section ?: "")
+                                    }
                                 }
-
-                                ProfileRow(label = "Section", value = profileData?.section ?: "")
                             }
                         }
                     }
@@ -134,7 +172,7 @@ fun AccountView(
                         ) {
                             Text(
                                 text = "No profile data available",
-                                color = Color.Gray
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -142,11 +180,18 @@ fun AccountView(
 
                 // Close button
                 Button(
-                    onClick = onDismiss,
+                    onClick = {
+                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                        onDismiss()
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 16.dp),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(28.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
                     Text("Close")
                 }
@@ -185,13 +230,14 @@ fun ProfileRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp, horizontal = 4.dp)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         // Label on the left side
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = Color.DarkGray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f)
         )
 
@@ -201,6 +247,7 @@ fun ProfileRow(label: String, value: String) {
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.End,  // Right-align the text
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
                 .weight(1f)  // Take up equal space as the label
                 .padding(start = 8.dp)  // Add some spacing between label and value
