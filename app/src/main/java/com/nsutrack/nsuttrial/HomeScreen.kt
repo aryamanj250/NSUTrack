@@ -1,9 +1,7 @@
 package com.nsutrack.nsuttrial
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -21,27 +20,29 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import android.util.Log
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.unit.IntOffset
 import com.nsutrack.nsuttrial.ui.theme.getAttendanceAdvice
 import com.nsutrack.nsuttrial.ui.theme.getAttendanceStatusColor
 import com.nsutrack.nsuttrial.ui.theme.getReadableTextColor
 import java.util.*
 import kotlin.math.max
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
@@ -50,6 +51,7 @@ fun HomeScreen(
     var isLoaded by remember { mutableStateOf(false) }
     var showingAccountSheet by remember { mutableStateOf(false) }
     val hapticFeedback = HapticFeedback.getHapticFeedback()
+    val coroutineScope = rememberCoroutineScope()
 
     // Collect state flows
     val isLoading by viewModel.isLoading.collectAsState()
@@ -104,7 +106,7 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = {
                     Text(
                         text = stringResource(R.string.home),
@@ -118,15 +120,33 @@ fun HomeScreen(
                             hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
                             showingAccountSheet = true
                         }) {
-                        Icon(
-                            imageVector = Icons.Default.AccountCircle,
-                            contentDescription = "Profile",
-                            modifier = Modifier.size(28.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                        // If we have profile data, show the first letter of the name as the avatar
+                        if (profileData != null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = profileData?.studentName?.take(1)?.uppercase() ?: "A",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.AccountCircle,
+                                contentDescription = "Profile",
+                                modifier = Modifier.size(32.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground
                 )
@@ -142,32 +162,48 @@ fun HomeScreen(
             AnimatedVisibility(
                 visible = isLoaded,
                 enter = fadeIn(animationSpec = tween(500)) +
-                        slideInHorizontally(animationSpec = tween(500)) { it / 5 }
+                        slideInVertically(animationSpec = tween(500)) { it / 5 }
             ) {
                 // Wrap the content in SwipeRefresh
                 SwipeRefresh(
                     state = rememberSwipeRefreshState(isLoading),
                     onRefresh = {
                         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                        viewModel.refreshData()
+                        coroutineScope.launch {
+                            viewModel.refreshData()
+                        }
                     }
                 ) {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         state = rememberLazyListState(),
-                        contentPadding = PaddingValues(bottom = 24.dp)
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 8.dp,
+                            bottom = 24.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         item {
                             // Schedule Section
                             HomeScheduleSection(viewModel = viewModel, hapticFeedback = hapticFeedback)
+                        }
 
-                            // Error message display
-                            if (errorMessage.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(8.dp))
+                        // Error message display
+                        if (errorMessage.isNotEmpty()) {
+                            item {
+                                Modifier
+                                    .fillMaxWidth()
                                 ElevatedCard(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp),
+                                    modifier = Modifier.animateItem(
+                                        fadeInSpec = null,
+                                        fadeOutSpec = null,
+                                        placementSpec = spring(
+                                            stiffness = Spring.StiffnessMediumLow,
+                                            visibilityThreshold = IntOffset.VisibilityThreshold
+                                        )
+                                    ),
                                     colors = CardDefaults.elevatedCardColors(
                                         containerColor = MaterialTheme.colorScheme.errorContainer
                                     ),
@@ -180,10 +216,105 @@ fun HomeScreen(
                                     )
                                 }
                             }
+                        }
 
-                            // Attendance Section
-                            Spacer(modifier = Modifier.height(8.dp))
-                            AttendanceSection(viewModel = viewModel, hapticFeedback = hapticFeedback)
+                        item {
+                            // Section Header for Attendance
+                            Text(
+                                text = stringResource(R.string.attendance),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+
+                        // Attendance Section
+                        when {
+                            isLoading && subjectData.isEmpty() -> {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(200.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(40.dp),
+                                            strokeWidth = 4.dp
+                                        )
+                                    }
+                                }
+                            }
+                            subjectData.isEmpty() -> {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(200.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                text = stringResource(R.string.no_attendance_data),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
+
+                                            if (errorMessage.isNotEmpty()) {
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(
+                                                    text = errorMessage,
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.height(16.dp))
+
+                                            Button(
+                                                onClick = {
+                                                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                                    coroutineScope.launch {
+                                                        viewModel.refreshData()
+                                                    }
+                                                },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.primary
+                                                ),
+                                                shape = RoundedCornerShape(24.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Refresh,
+                                                    contentDescription = "Refresh",
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = "Refresh",
+                                                    style = MaterialTheme.typography.labelLarge
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else -> {
+                                items(
+                                    items = subjectData,
+                                    key = { it.code }
+                                ) { subject ->
+                                    AttendanceCard(
+                                        subject = subject,
+                                        viewModel = viewModel,
+                                        hapticFeedback = hapticFeedback,
+                                        modifier = Modifier.animateItemPlacement(
+                                            animationSpec = tween(300)
+                                        )
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -290,11 +421,12 @@ fun HomeScheduleSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
+            .padding(bottom = 8.dp)
     ) {
+        // Section header with icon
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            modifier = Modifier.padding(vertical = 12.dp)
         ) {
             Text(
                 text = stringResource(R.string.schedule),
@@ -314,48 +446,75 @@ fun HomeScheduleSection(
         }
 
         if (timetableError != null) {
-            Text(
-                text = timetableError ?: "",
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = timetableError ?: "",
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
         } else if (todaySchedule.isEmpty()) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .height(96.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.no_classes_today),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp),
-                    textAlign = TextAlign.Center
-                )
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stringResource(R.string.no_classes_today),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         } else {
             Box(
                 modifier = Modifier
-                    .height(100.dp)
+                    .height(110.dp)
                     .fillMaxWidth()
             ) {
                 // Schedule cards in horizontal scrollable list
                 LazyRow(
                     state = listState,
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(
                         items = todaySchedule,
                         key = { it.id }
                     ) { schedule ->
+                        val isCurrentClass = schedule.isCurrentTime(currentTime)
+
+                        // Apply scaling animation to current class
+                        val scale by animateFloatAsState(
+                            targetValue = if (isCurrentClass) 1.05f else 1f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessLow
+                            ),
+                            label = "Class card scale"
+                        )
+
                         HomeScheduleCard(
                             schedule = schedule,
-                            width = calculateWidth(schedule)
+                            width = calculateWidth(schedule),
+                            isCurrentClass = isCurrentClass,
+                            animationScale = scale
                         )
                     }
                 }
@@ -371,190 +530,127 @@ fun HomeScheduleSection(
 }
 
 @Composable
-fun HomeScheduleCard(schedule: Schedule, width: Float) {
+fun HomeScheduleCard(
+    schedule: Schedule,
+    width: Float,
+    isCurrentClass: Boolean,
+    animationScale: Float
+) {
     val textColor = getReadableTextColor(schedule.color)
 
-    ElevatedCard(
+    // Add elevation for current class
+    val elevation = if (isCurrentClass) 6.dp else 3.dp
+
+    Box(
         modifier = Modifier
-            .width(width.dp)
-            .height(90.dp),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 4.dp
-        ),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = schedule.color.copy(alpha = 0.9f)
-        )
+            .width((width * animationScale).dp)
+            .height((90 * animationScale).dp)
+            .shadow(
+                elevation = elevation,
+                shape = RoundedCornerShape(16.dp),
+                spotColor = schedule.color.copy(alpha = 0.5f)
+            )
     ) {
-        Column(
+        Card(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxSize(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = schedule.color.copy(alpha = 0.9f)
+            )
         ) {
-            // Subject name
-            Text(
-                text = schedule.subject,
-                style = MaterialTheme.typography.titleMedium,
-                color = textColor.copy(alpha = 0.95f),
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Subject name
+                Text(
+                    text = schedule.subject,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = textColor.copy(alpha = 0.95f),
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
 
-            // Time range
-            Text(
-                text = schedule.timeRange,
-                style = MaterialTheme.typography.bodyMedium,
-                color = textColor.copy(alpha = 0.95f),
-                maxLines = 1
-            )
+                // Time range
+                Text(
+                    text = schedule.timeRange,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = textColor.copy(alpha = 0.95f),
+                    maxLines = 1
+                )
 
-            // Room and group info
-            if (schedule.room != null || schedule.group != null) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Room info
-                    if (schedule.room != null) {
-                        val roomText = if (schedule.room.contains(", ")) {
-                            val rooms = schedule.room.split(", ")
-                            if (rooms.size > 2) {
-                                "${rooms[0]}, ${rooms[1]}..."
+                // Room and group info
+                if (schedule.room != null || schedule.group != null) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Room info
+                        if (schedule.room != null) {
+                            val roomText = if (schedule.room.contains(", ")) {
+                                val rooms = schedule.room.split(", ")
+                                if (rooms.size > 2) {
+                                    "${rooms[0]}, ${rooms[1]}..."
+                                } else {
+                                    schedule.room
+                                }
                             } else {
                                 schedule.room
                             }
-                        } else {
-                            schedule.room
+
+                            Text(
+                                text = roomText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = textColor.copy(alpha = 0.9f),
+                                maxLines = 1
+                            )
                         }
 
-                        Text(
-                            text = roomText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = textColor.copy(alpha = 0.9f),
-                            maxLines = 1
-                        )
-                    }
+                        // Separator
+                        if (schedule.room != null && schedule.group != null) {
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = textColor.copy(alpha = 0.7f)
+                            )
+                        }
 
-                    // Separator
-                    if (schedule.room != null && schedule.group != null) {
-                        Text(
-                            text = "•",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = textColor.copy(alpha = 0.7f)
-                        )
-                    }
-
-                    // Group info
-                    if (schedule.group != null) {
-                        Text(
-                            text = schedule.group,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = textColor.copy(alpha = 0.9f),
-                            maxLines = 1
-                        )
+                        // Group info
+                        if (schedule.group != null) {
+                            Text(
+                                text = schedule.group,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = textColor.copy(alpha = 0.9f),
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
             }
         }
-    }
-}
 
-
-@Composable
-fun AttendanceSection(
-    viewModel: AttendanceViewModel,
-    hapticFeedback: HapticFeedback.HapticHandler,
-    modifier: Modifier = Modifier
-) {
-    val subjectData by viewModel.subjectData.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.attendance),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 8.dp)
-        )
-
-        if (isLoading && subjectData.isEmpty()) {
+        // Add a small indicator for current class
+        if (isCurrentClass) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-        } else if (subjectData.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = stringResource(R.string.no_attendance_data),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    if (errorMessage.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = errorMessage,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = {
-                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                            viewModel.refreshData()
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh",
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "Refresh")
-                    }
-                }
-            }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                subjectData.forEach { subject ->
-                    AttendanceCard(subject = subject, viewModel = viewModel, hapticFeedback = hapticFeedback)
-                }
-            }
+                    .size(12.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-8).dp, y = 8.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+            )
         }
     }
 }
-
 @Composable
 fun AttendanceCard(
     subject: SubjectData,
     viewModel: AttendanceViewModel,
-    hapticFeedback: HapticFeedback.HapticHandler
+    hapticFeedback: HapticFeedback.HapticHandler,
+    modifier: Modifier = Modifier
 ) {
     var showDetailedView by remember { mutableStateOf(false) }
 
@@ -565,20 +661,28 @@ fun AttendanceCard(
 
     val attendanceColor = viewModel.getAttendanceStatusColor(subject.attendancePercentage)
 
-    ElevatedCard(
-        modifier = Modifier
+    // Animation for the attendance percentage
+    val animatedPercentage = remember { Animatable(0f) }
+
+    LaunchedEffect(subject.attendancePercentage) {
+        animatedPercentage.animateTo(
+            targetValue = subject.attendancePercentage,
+            animationSpec = tween(1000, easing = FastOutSlowInEasing)
+        )
+    }
+
+    Card(  // Changed from ElevatedCard to Card for a flatter look
+        modifier = modifier
             .fillMaxWidth()
             .clickable {
                 hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
                 showDetailedView = true
             },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.elevatedCardColors(
+        colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 2.dp
-        )
+        // Removed elevation property to minimize shadow
     ) {
         Row(
             modifier = Modifier
@@ -595,28 +699,58 @@ fun AttendanceCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
+                Spacer(modifier = Modifier.height(4.dp))
+
                 Text(
                     text = adviceText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = adviceColor
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Progress indicator
+                Box(
+                    modifier = Modifier
+                        .height(6.dp)
+                        .fillMaxWidth(0.75f)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(animatedPercentage.value / 100f)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(attendanceColor)
+                    )
+                }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val percentage = subject.attendancePercentage
-
-                Text(
-                    text = "${percentage.toInt()}%",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = attendanceColor
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Percentage circle
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(attendanceColor.copy(alpha = 0.15f))
+                ) {
+                    Text(
+                        text = "${subject.attendancePercentage.toInt()}%",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = attendanceColor
+                    )
+                }
 
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = "Details",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 8.dp)
                 )
             }
         }
@@ -633,7 +767,6 @@ fun AttendanceCard(
         )
     }
 }
-
 // Helper function to parse class times
 private fun parseClassTimes(startTimeStr: String, endTimeStr: String, baseDate: Date): Pair<Date, Date>? {
     try {
@@ -707,20 +840,20 @@ private fun calculateWidth(schedule: Schedule): Float {
     val durationInHours = schedule.duration / 3600f
     return max(hourWidth, durationInHours * hourWidth) // Ensure minimum width
 }
-
 // Calculate position for the current time red line
 private fun calculateRedLinePosition(currentTime: Date): Float {
     val hourWidth = 160f // Same scale as card width
 
     // Define start of day (9:00 AM for academic schedule)
     val startOfDay = Calendar.getInstance()
+    startOfDay.time = currentTime
     startOfDay.set(Calendar.HOUR_OF_DAY, 9)
     startOfDay.set(Calendar.MINUTE, 0)
     startOfDay.set(Calendar.SECOND, 0)
     startOfDay.set(Calendar.MILLISECOND, 0)
 
     // Calculate elapsed time since start of day in hours
-    val elapsedMillis = currentTime.time - startOfDay.time.time
+    val elapsedMillis = currentTime.time - startOfDay.timeInMillis
     val elapsedHours = elapsedMillis / (1000 * 60 * 60f)
 
     return if (elapsedHours > 0) {

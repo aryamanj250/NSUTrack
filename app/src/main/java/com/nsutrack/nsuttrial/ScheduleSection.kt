@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -400,20 +401,25 @@ fun ScheduleCard(schedule: Schedule, width: Float) {
 }
 
 @Composable
-internal fun RedLineIndicator(position: Float) {
-    val errorColor = MaterialTheme.colorScheme.error
-
-    Canvas(
+fun RedLineIndicator(position: Float) {
+    Row(
         modifier = Modifier
-            .fillMaxHeight()
-            .width(2.dp)
             .offset(x = position.dp)
+            .fillMaxHeight(),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        drawLine(
-            color = errorColor,
-            start = Offset(0f, 0f),
-            end = Offset(0f, size.height),
-            strokeWidth = 2f
+        Box(
+            modifier = Modifier
+                .width(2.dp)
+                .fillMaxHeight(0.6f)
+                .background(MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
+        )
+
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.error)
         )
     }
 }

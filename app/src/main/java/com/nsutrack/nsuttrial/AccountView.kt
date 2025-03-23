@@ -1,25 +1,34 @@
 package com.nsutrack.nsuttrial
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.text.style.TextAlign
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountView(
     viewModel: AttendanceViewModel,
@@ -30,28 +39,62 @@ fun AccountView(
     val errorMessage by viewModel.profileError.collectAsState()
     val hapticFeedback = HapticFeedback.getHapticFeedback()
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.8f),
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
-        ) {
-            Column(
+    // Animation state for the screen transition
+    val visibleState = remember {
+        MutableTransitionState(false).apply {
+            targetState = true
+        }
+    }
+
+    AnimatedVisibility(
+        visibleState = visibleState,
+        enter = expandVertically(
+            expandFrom = Alignment.CenterVertically,
+            animationSpec = tween(300)
+        ) + fadeIn(animationSpec = tween(300)),
+        exit = shrinkVertically(
+            shrinkTowards = Alignment.CenterVertically,
+            animationSpec = tween(300)
+        ) + fadeOut(animationSpec = tween(300))
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "Profile",
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                            visibleState.targetState = false
+                            // Delay dismissal to allow animation to complete
+                            android.os.Handler().postDelayed({ onDismiss() }, 300)
+                        }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground
+                    )
+                )
+            }
+        ) { paddingValues ->
+            Surface(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(20.dp)
+                    .padding(paddingValues),
+                color = MaterialTheme.colorScheme.background
             ) {
-                // Header
-                Text(
-                    text = "Account",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
                 when {
                     isLoading -> {
                         // Loading state
@@ -60,7 +103,9 @@ fun AccountView(
                             contentAlignment = Alignment.Center
                         ) {
                             CircularProgressIndicator(
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(48.dp),
+                                strokeWidth = 4.dp
                             )
                         }
                     }
@@ -70,32 +115,39 @@ fun AccountView(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(24.dp)
+                            ) {
                                 Text(
                                     text = "Error loading profile data",
                                     color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodyLarge,
+                                    style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Medium
                                 )
 
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
 
                                 Text(
                                     text = errorMessage ?: "",
-                                    color = Color.Gray,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    textAlign = TextAlign.Center
                                 )
 
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(24.dp))
 
                                 Button(
                                     onClick = {
                                         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
                                         viewModel.fetchProfileData()
                                     },
-                                    shape = RoundedCornerShape(28.dp)
+                                    shape = RoundedCornerShape(24.dp)
                                 ) {
-                                    Text("Retry")
+                                    Text(
+                                        "Retry",
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
                                 }
                             }
                         }
@@ -103,9 +155,19 @@ fun AccountView(
                     profileData != null -> {
                         // Profile data
                         LazyColumn(
-                            modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(vertical = 8.dp)
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                start = 20.dp,
+                                end = 20.dp,
+                                top = 8.dp,
+                                bottom = 32.dp
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(24.dp)
                         ) {
+                            item {
+                                ProfileHeader(profileData?.studentName ?: "", profileData?.studentID ?: "")
+                            }
+
                             item {
                                 SectionTitle(
                                     title = "Personal Information",
@@ -115,14 +177,17 @@ fun AccountView(
                                 ElevatedCard(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
+                                        .padding(top = 12.dp),
                                     shape = RoundedCornerShape(16.dp),
                                     elevation = CardDefaults.elevatedCardElevation(
                                         defaultElevation = 2.dp
                                     )
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(16.dp)
+                                        modifier = Modifier.padding(
+                                            vertical = 16.dp,
+                                            horizontal = 20.dp
+                                        )
                                     ) {
                                         ProfileRow(label = "Name", value = profileData?.studentName ?: "")
                                         ProfileRow(label = "Student ID", value = profileData?.studentID ?: "")
@@ -130,9 +195,9 @@ fun AccountView(
                                         ProfileRow(label = "Gender", value = profileData?.gender ?: "")
                                     }
                                 }
+                            }
 
-                                Spacer(modifier = Modifier.height(16.dp))
-
+                            item {
                                 SectionTitle(
                                     title = "Academic Information",
                                     icon = Icons.Filled.School
@@ -141,14 +206,17 @@ fun AccountView(
                                 ElevatedCard(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
+                                        .padding(top = 12.dp),
                                     shape = RoundedCornerShape(16.dp),
                                     elevation = CardDefaults.elevatedCardElevation(
                                         defaultElevation = 2.dp
                                     )
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(16.dp)
+                                        modifier = Modifier.padding(
+                                            vertical = 16.dp,
+                                            horizontal = 20.dp
+                                        )
                                     ) {
                                         ProfileRow(label = "Degree", value = profileData?.degree ?: "")
                                         ProfileRow(label = "Branch", value = profileData?.branchName ?: "")
@@ -172,31 +240,56 @@ fun AccountView(
                         ) {
                             Text(
                                 text = "No profile data available",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyLarge
                             )
                         }
                     }
                 }
-
-                // Close button
-                Button(
-                    onClick = {
-                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                        onDismiss()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                ) {
-                    Text("Close")
-                }
             }
         }
+    }
+}
+
+@Composable
+fun ProfileHeader(name: String, studentId: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Profile avatar placeholder
+        Surface(
+            modifier = Modifier.size(100.dp),
+            shape = RoundedCornerShape(50.dp),
+            color = MaterialTheme.colorScheme.primaryContainer
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = name.take(1).uppercase(),
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = name,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        Text(
+            text = studentId,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp)
+        )
     }
 }
 
@@ -205,7 +298,7 @@ fun SectionTitle(title: String, icon: ImageVector) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(top = 8.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -214,7 +307,7 @@ fun SectionTitle(title: String, icon: ImageVector) {
             tint = MaterialTheme.colorScheme.primary
         )
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
         Text(
             text = title,
@@ -230,7 +323,7 @@ fun ProfileRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp, horizontal = 4.dp),
+            .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Label on the left side
@@ -246,11 +339,11 @@ fun ProfileRow(label: String, value: String) {
             text = formatProfileValue(label, value),
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.End,  // Right-align the text
+            textAlign = TextAlign.End,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
-                .weight(1f)  // Take up equal space as the label
-                .padding(start = 8.dp)  // Add some spacing between label and value
+                .weight(1f)
+                .padding(start = 8.dp)
         )
     }
 }
