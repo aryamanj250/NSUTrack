@@ -1,32 +1,36 @@
 package com.nsutrack.nsuttrial
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
+// Define custom easing curves
+private val EaseInQuart = CubicBezierEasing(0.5f, 0f, 0.75f, 0f)
+private val EaseOutQuart = CubicBezierEasing(0.25f, 1f, 0.5f, 1f)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,211 +42,217 @@ fun AccountView(
     val isLoading by viewModel.isProfileLoading.collectAsState()
     val errorMessage by viewModel.profileError.collectAsState()
     val hapticFeedback = HapticFeedback.getHapticFeedback()
+    val coroutineScope = rememberCoroutineScope()
 
-    // Animation state for the screen transition
-    val visibleState = remember {
+    // Animation state for fullscreen entry/exit
+    val visible = remember {
         MutableTransitionState(false).apply {
             targetState = true
         }
     }
 
-    AnimatedVisibility(
-        visibleState = visibleState,
-        enter = expandVertically(
-            expandFrom = Alignment.CenterVertically,
-            animationSpec = tween(300)
-        ) + fadeIn(animationSpec = tween(300)),
-        exit = shrinkVertically(
-            shrinkTowards = Alignment.CenterVertically,
-            animationSpec = tween(300)
-        ) + fadeOut(animationSpec = tween(300))
+    // Handle back button press with animation
+    BackHandler {
+        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+        coroutineScope.launch {
+            visible.targetState = false
+            delay(300)  // Wait for exit animation to complete
+            onDismiss()
+        }
+    }
+
+    // Use Dialog to ensure full screen display
+    Dialog(
+        onDismissRequest = {
+            coroutineScope.launch {
+                visible.targetState = false
+                delay(300)
+                onDismiss()
+            }
+        },
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false  // Make it full width
+        )
     ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = "Profile",
-                            style = MaterialTheme.typography.headlineMedium.copy(
+        AnimatedVisibility(
+            visibleState = visible,
+            enter = slideInVertically(
+                initialOffsetY = { it },  // Start fully below the screen
+                animationSpec = tween(400, easing = EaseOutQuart)
+            ) + fadeIn(animationSpec = tween(350)),
+            exit = slideOutVertically(
+                targetOffsetY = { it },  // Exit to fully below the screen
+                animationSpec = tween(300, easing = EaseInQuart)
+            ) + fadeOut(animationSpec = tween(200))
+        ) {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = "Profile",
+                                style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.SemiBold
                             )
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = {
+                                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                coroutineScope.launch {
+                                    visible.targetState = false
+                                    delay(300)
+                                    onDismiss()
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            titleContentColor = MaterialTheme.colorScheme.onSurface
                         )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = {
-                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                            visibleState.targetState = false
-                            // Delay dismissal to allow animation to complete
-                            android.os.Handler().postDelayed({ onDismiss() }, 300)
-                        }) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground
                     )
-                )
-            }
-        ) { paddingValues ->
-            Surface(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                when {
-                    isLoading -> {
-                        // Loading state
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(48.dp),
-                                strokeWidth = 4.dp
-                            )
-                        }
-                    }
-                    errorMessage != null -> {
-                        // Error state
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(24.dp)
+                }
+            ) { paddingValues ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    when {
+                        isLoading -> {
+                            // Loading state
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = "Error loading profile data",
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Medium
+                                CircularProgressIndicator(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(48.dp),
+                                    strokeWidth = 4.dp
                                 )
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Text(
-                                    text = errorMessage ?: "",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    textAlign = TextAlign.Center
-                                )
-
-                                Spacer(modifier = Modifier.height(24.dp))
-
-                                Button(
-                                    onClick = {
-                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                                        viewModel.fetchProfileData()
-                                    },
-                                    shape = RoundedCornerShape(24.dp)
+                            }
+                        }
+                        errorMessage != null -> {
+                            // Error state
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(24.dp)
                                 ) {
                                     Text(
-                                        "Retry",
-                                        style = MaterialTheme.typography.labelLarge
+                                        text = "Error loading profile data",
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Medium
                                     )
-                                }
-                            }
-                        }
-                    }
-                    profileData != null -> {
-                        // Profile data
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(
-                                start = 20.dp,
-                                end = 20.dp,
-                                top = 8.dp,
-                                bottom = 32.dp
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(24.dp)
-                        ) {
-                            item {
-                                ProfileHeader(profileData?.studentName ?: "", profileData?.studentID ?: "")
-                            }
 
-                            item {
-                                SectionTitle(
-                                    title = "Personal Information",
-                                    icon = Icons.Filled.Person
-                                )
+                                    Spacer(modifier = Modifier.height(12.dp))
 
-                                ElevatedCard(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 12.dp),
-                                    shape = RoundedCornerShape(16.dp),
-                                    elevation = CardDefaults.elevatedCardElevation(
-                                        defaultElevation = 2.dp
+                                    Text(
+                                        text = errorMessage ?: "",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        textAlign = TextAlign.Center
                                     )
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(
-                                            vertical = 16.dp,
-                                            horizontal = 20.dp
-                                        )
+
+                                    Spacer(modifier = Modifier.height(24.dp))
+
+                                    Button(
+                                        onClick = {
+                                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                            viewModel.fetchProfileData()
+                                        },
+                                        shape = RoundedCornerShape(24.dp)
                                     ) {
-                                        ProfileRow(label = "Name", value = profileData?.studentName ?: "")
-                                        ProfileRow(label = "Student ID", value = profileData?.studentID ?: "")
-                                        ProfileRow(label = "Date of birth", value = profileData?.dob ?: "")
-                                        ProfileRow(label = "Gender", value = profileData?.gender ?: "")
+                                        Text(
+                                            "Retry",
+                                            style = MaterialTheme.typography.labelLarge
+                                        )
                                     }
                                 }
                             }
+                        }
+                        profileData != null -> {
+                            // Profile data with enhanced UI
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    start = 20.dp,
+                                    end = 20.dp,
+                                    top = 8.dp,
+                                    bottom = 32.dp
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(24.dp)
+                            ) {
+                                item {
+                                    ProfileHeader(profileData?.studentName ?: "", profileData?.studentID ?: "")
+                                }
 
-                            item {
-                                SectionTitle(
-                                    title = "Academic Information",
-                                    icon = Icons.Filled.School
-                                )
-
-                                ElevatedCard(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 12.dp),
-                                    shape = RoundedCornerShape(16.dp),
-                                    elevation = CardDefaults.elevatedCardElevation(
-                                        defaultElevation = 2.dp
-                                    )
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(
-                                            vertical = 16.dp,
-                                            horizontal = 20.dp
-                                        )
-                                    ) {
-                                        ProfileRow(label = "Degree", value = profileData?.degree ?: "")
-                                        ProfileRow(label = "Branch", value = profileData?.branchName ?: "")
-
-                                        // Only show specialization if different from branch
-                                        if (profileData?.specialization?.uppercase() != profileData?.branchName?.uppercase()) {
-                                            ProfileRow(label = "Specialization", value = profileData?.specialization ?: "")
+                                item {
+                                    ProfileSection(
+                                        title = "Personal Information",
+                                        icon = Icons.Filled.Person,
+                                        content = {
+                                            ProfileRow(label = "Name", value = profileData?.studentName ?: "")
+                                            ProfileRow(label = "Student ID", value = profileData?.studentID ?: "")
+                                            ProfileRow(label = "Date of birth", value = profileData?.dob ?: "")
+                                            ProfileRow(label = "Gender", value = profileData?.gender ?: "")
+                                            // Category removed as requested
                                         }
+                                    )
+                                }
 
-                                        ProfileRow(label = "Section", value = profileData?.section ?: "")
-                                    }
+                                item {
+                                    ProfileSection(
+                                        title = "Academic Information",
+                                        icon = Icons.Filled.School,
+                                        content = {
+                                            ProfileRow(label = "Degree", value = profileData?.degree ?: "")
+                                            ProfileRow(label = "Branch", value = profileData?.branchName ?: "")
+
+                                            // Only show specialization if different from branch
+                                            if (profileData?.specialization?.uppercase() != profileData?.branchName?.uppercase() &&
+                                                profileData?.specialization?.isNotBlank() == true) {
+                                                ProfileRow(label = "Specialization", value = profileData?.specialization ?: "")
+                                            }
+
+                                            ProfileRow(label = "Section", value = profileData?.section ?: "")
+
+                                            if (profileData?.ftpt?.isNotBlank() == true) {
+                                                ProfileRow(label = "Mode", value = profileData?.ftpt ?: "")
+                                            }
+
+                                            if (profileData?.admission?.isNotBlank() == true) {
+                                                ProfileRow(label = "Admission", value = profileData?.admission ?: "")
+                                            }
+                                        }
+                                    )
                                 }
                             }
                         }
-                    }
-                    else -> {
-                        // No data state
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "No profile data available",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                        else -> {
+                            // No data state
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No profile data available",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
                         }
                     }
                 }
@@ -256,14 +266,32 @@ fun ProfileHeader(name: String, studentId: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp),
+            .padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Profile avatar placeholder
+        // Profile avatar with animated entry
+        var isLoaded by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            delay(100)
+            isLoaded = true
+        }
+
+        val scale by animateFloatAsState(
+            targetValue = if (isLoaded) 1f else 0.8f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessLow
+            ),
+            label = "Avatar Scale"
+        )
+
         Surface(
-            modifier = Modifier.size(100.dp),
-            shape = RoundedCornerShape(50.dp),
-            color = MaterialTheme.colorScheme.primaryContainer
+            modifier = Modifier
+                .size(110.dp)
+                .scale(scale),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            tonalElevation = 4.dp
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
@@ -284,71 +312,156 @@ fun ProfileHeader(name: String, studentId: String) {
             color = MaterialTheme.colorScheme.onBackground
         )
 
-        Text(
-            text = studentId,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp)
-        )
+        AnimatedVisibility(
+            visible = isLoaded,
+            enter = fadeIn(animationSpec = tween(500)) +
+                    expandVertically(animationSpec = tween(500))
+        ) {
+            Text(
+                text = studentId,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
     }
 }
 
 @Composable
-fun SectionTitle(title: String, icon: ImageVector) {
-    Row(
+fun ProfileSection(
+    title: String,
+    icon: ImageVector,
+    content: @Composable () -> Unit
+) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            )
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary
-        )
+        // Section header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(40.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
 
-        Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
+
+        // Section content
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 2.dp
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(
+                    vertical = 8.dp,
+                    horizontal = 0.dp
+                )
+            ) {
+                content()
+            }
+        }
     }
 }
 
 @Composable
 fun ProfileRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Label on the left side
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
-        )
+    // Staggered animation for list items
+    var isVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(100) // Small delay before starting animation
+        isVisible = true
+    }
 
-        // Value on the right side with right alignment
-        Text(
-            text = formatProfileValue(label, value),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.End,
-            color = MaterialTheme.colorScheme.onSurface,
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn(animationSpec = tween(300)) +
+                slideInHorizontally(
+                    initialOffsetX = { -20 },
+                    animationSpec = tween(300)
+                )
+    ) {
+        Column(
             modifier = Modifier
-                .weight(1f)
-                .padding(start = 8.dp)
-        )
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Label on the left side
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(0.35f)
+                )
+
+                // Value on the right side with right alignment
+                Text(
+                    text = formatProfileValue(label, value),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .weight(0.65f)
+                        .padding(start = 8.dp)
+                )
+            }
+
+            // Add divider if not the last element
+            if (label != "Section" && label != "Admission" && label != "Mode" &&
+                label != "Gender" && label != "Category" && label != "Specialization") {
+                Divider(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 0.dp, end = 0.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    thickness = 0.5.dp
+                )
+            }
+        }
     }
 }
 
-// Format profile values appropriately
+// Format profile values appropriately - keeping existing functionality
 fun formatProfileValue(label: String, value: String): String {
     return when (label) {
         "Student ID" -> value  // Keep student ID as is
@@ -356,21 +469,24 @@ fun formatProfileValue(label: String, value: String): String {
             if (value.uppercase().contains("VLSI")) {
                 // Handle VLSI case (keep VLSI in uppercase)
                 value.split(" ").joinToString(" ") { word ->
-                    if (word.uppercase() == "VLSI") "VLSI" else word.toLowerCase().capitalize()
+                    if (word.uppercase() == "VLSI") "VLSI" else word.lowercase().capitalize()
                 }
             } else {
-                value.toLowerCase().capitalize()
+                value.lowercase().capitalize()
             }
         }
-        else -> value.toLowerCase().capitalize()  // Capitalize other values
+        "Mode" -> {
+            when (value.uppercase()) {
+                "FT" -> "Full Time"
+                "PT" -> "Part Time"
+                else -> value.lowercase().capitalize()
+            }
+        }
+        else -> value.lowercase().capitalize()  // Capitalize other values
     }
 }
 
-// Extension functions for string capitalization
+// Extension functions for string capitalization - keeping existing functionality
 fun String.capitalize(): String {
     return this.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-}
-
-fun String.toLowerCase(): String {
-    return this.lowercase()
 }

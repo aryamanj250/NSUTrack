@@ -17,9 +17,12 @@ import okhttp3.ResponseBody
 import retrofit2.HttpException
 import java.io.IOException
 import android.util.Log
+import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.core.content.edit
 import com.google.gson.annotations.SerializedName
 import com.nsutrack.nsuttrial.ui.theme.generateConsistentColor
 
@@ -79,6 +82,11 @@ class AttendanceViewModel : ViewModel() {
     private val _useDynamicColors = MutableStateFlow(true)
     val useDynamicColors: StateFlow<Boolean> = _useDynamicColors
 
+    // Stored credentials for auto-refresh
+    private val _storedUsername = MutableStateFlow<String?>(null)
+    private val _storedPassword = MutableStateFlow<String?>(null)
+    private var sharedPreferences: SharedPreferences? = null
+
     // Keep track of active jobs
     private var activeLoginJob: Job? = null
     private var activeAttendanceJob: Job? = null
@@ -89,6 +97,18 @@ class AttendanceViewModel : ViewModel() {
     init {
         Log.d(TAG, "ViewModel initialized")
         initializeSession()
+    }
+
+    // Initialize shared preferences for credential storage
+    fun initializeSharedPreferences(context: Context) {
+        sharedPreferences = context.getSharedPreferences("nsu_credentials", Context.MODE_PRIVATE)
+        // Load stored credentials if available
+        val username = sharedPreferences?.getString("username", null)
+        val password = sharedPreferences?.getString("password", null)
+        _storedUsername.value = username
+        _storedPassword.value = password
+
+        Log.d(TAG, "SharedPreferences initialized, credentials ${if (username != null) "found" else "not found"}")
     }
 
     // Set dynamic color preference
@@ -122,6 +142,19 @@ class AttendanceViewModel : ViewModel() {
 
     // Step 4: Submit credentials
     fun login(username: String, password: String) {
+        // Store credentials for future refreshes
+        _storedUsername.value = username
+        _storedPassword.value = password
+
+        // Save to SharedPreferences
+        sharedPreferences?.edit {
+            putString("username", username)
+            putString("password", password)
+            apply()
+        }
+
+        Log.d(TAG, "Stored credentials for future refreshes")
+
         // Cancel previous login attempt if any
         activeLoginJob?.cancel()
 
@@ -365,9 +398,7 @@ class AttendanceViewModel : ViewModel() {
                 for (code in subjectCodes) {
                     val codePos = subjectMappingRow.indexOf("$code-")
                     if (codePos >= 0) {
-                        val startPos = codePos + code.length + 1 // Skip past the code and dash
-
-                        // Find where the next code starts (or end of string)
+                        val startPos = codePos + code.length + 1
                         var endPos = subjectMappingRow.length
                         for (nextCode in subjectCodes) {
                             if (nextCode != code) {
@@ -601,73 +632,99 @@ class AttendanceViewModel : ViewModel() {
         }
     }
 
-    // Pull-to-refresh functionality
+    // Improved Pull-to-refresh functionality with credential resubmission
     fun refreshData() {
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = ""
 
-            val currentSessionId = _sessionId.value
-            Log.d(TAG, "Refreshing data with session ID: $currentSessionId")
+            Log.d(TAG, "Starting refresh data flow")
 
             try {
+                // First, get a new session regardless of current state
+                initializeSession()
+
+                // Wait a short time for session initialization
+                delay(500)
+
+                val currentSessionId = _sessionId.value
                 if (currentSessionId == null) {
-                    Log.e(TAG, "Cannot refresh: No session ID available")
-                    _errorMessage.value = "Session not available. Please log in first"
+                    Log.e(TAG, "Failed to initialize session for refresh")
+                    _errorMessage.value = "Failed to initialize connection. Please try again."
                     _isLoading.value = false
                     return@launch
                 }
 
-                if (_isLoggedIn.value) {
-                    // Fetch fresh attendance data
-                    Log.d(TAG, "User is logged in, fetching fresh attendance data")
-                    fetchAttendanceData()
+                // Check if we have stored credentials
+                val username = _storedUsername.value
+                val password = _storedPassword.value
 
-                    // Also fetch profile and timetable data
-                    fetchProfileData()
-                    fetchTimetableData()
+                if (username != null && password != null) {
+                    Log.d(TAG, "Using stored credentials to refresh data")
+                    // Submit credentials with new session
+                    val loginResponse = apiService.login(
+                        LoginRequest(
+                            session_id = currentSessionId,
+                            uid = username,
+                            pwd = password
+                        )
+                    )
+
+                    if (!loginResponse.isSuccessful) {
+                        throw IOException("Login failed with code: ${loginResponse.code()}")
+                    }
+
+                    Log.d(TAG, "Credentials resubmitted, checking for errors...")
+
+                    // Check for credential errors
+                    var retryCount = 0
+                    var errorFound = false
+
+                    while (retryCount < 3) {
+                        val currentId = _sessionId.value ?: break
+                        val errorResponse = apiService.checkLoginErrors(currentId)
+
+                        if (errorResponse.has("error")) {
+                            // Handle invalid credentials
+                            val errorMessage = errorResponse.get("error").asString
+                            Log.e(TAG, "Login error during refresh: $errorMessage")
+
+                            if (errorResponse.has("new_session_id")) {
+                                val newSessionId = errorResponse.get("new_session_id").asString
+                                Log.d(TAG, "Received new session ID: $newSessionId")
+                                _sessionId.value = newSessionId
+                                _isSessionInitialized.value = true
+                            }
+
+                            _errorMessage.value = errorMessage
+                            errorFound = true
+                            break
+                        }
+
+                        // If no errors found, proceed to fetch attendance
+                        if (errorResponse.has("status") && errorResponse.get("status").asString == "no_errors") {
+                            Log.d(TAG, "No login errors found, proceeding to fetch attendance data")
+                            break
+                        }
+
+                        delay(300) // Brief delay before checking again
+                        retryCount++
+                    }
+
+                    // If no errors, fetch attendance data
+                    if (!errorFound) {
+                        Log.d(TAG, "Login successful, fetching fresh data with session ID: ${_sessionId.value}")
+                        _isLoggedIn.value = true
+                        fetchAttendanceData()
+                    }
                 } else {
                     // Try to see if we can fetch data with the existing session
-                    Log.d(TAG, "User not logged in, but will try with existing session")
-
-                    try {
-                        // Get attendance data using SSE with existing session
-                        val attendanceResponse = apiService.getAttendanceData(currentSessionId)
-
-                        if (attendanceResponse.isSuccessful && attendanceResponse.body() != null) {
-                            val responseBody = attendanceResponse.body()?.string() ?: ""
-
-                            // If we get a valid response, process it
-                            val dataPrefix = "data: "
-                            if (responseBody.contains(dataPrefix)) {
-                                val jsonData = responseBody.substringAfter(dataPrefix).substringBefore("\n")
-
-                                // Parse the attendance data
-                                parseAttendanceData(jsonData)
-
-                                _isLoggedIn.value = true
-                                _isAttendanceDataLoaded.value = true
-                                Log.d(TAG, "Successfully fetched and loaded attendance data with existing session")
-
-                                // Also fetch profile and timetable data
-                                fetchProfileData()
-                                fetchTimetableData()
-                            } else {
-                                _errorMessage.value = "Invalid data format. Please log in again."
-                                _isLoading.value = false
-                            }
-                        } else {
-                            _errorMessage.value = "Session expired. Please log in again."
-                            _isLoading.value = false
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error refreshing with existing session: ${e.message}")
-                        _errorMessage.value = "Please log in first"
-                        _isLoading.value = false
-                    }
+                    Log.d(TAG, "No stored credentials found, attempting with session only")
+                    _errorMessage.value = "Please log in to refresh data"
+                    _isLoading.value = false
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error refreshing data: ${e.message}")
+                Log.e(TAG, "Error during refresh: ${e.message}")
                 _errorMessage.value = "Error refreshing data: ${e.message}"
                 _isLoading.value = false
             }
@@ -753,3 +810,5 @@ data class ProfileData(
     @SerializedName("Section")
     val section: String = ""
 )
+
+

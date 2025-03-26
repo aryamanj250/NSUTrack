@@ -29,6 +29,7 @@ import com.nsutrack.nsuttrial.ui.theme.NSUTrackTheme
 
 
 class MainActivity : ComponentActivity() {
+    // In MainActivity.kt, add to onCreate method
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -40,6 +41,16 @@ class MainActivity : ComponentActivity() {
 
         // Create ViewModel at the Activity level for persistence across navigation
         val viewModel = ViewModelProvider(this)[AttendanceViewModel::class.java]
+
+        // Initialize SharedPreferences for credential storage
+        viewModel.initializeSharedPreferences(this)
+
+        // Rest of your onCreate method remains the same
+        setContent {
+            NSUTrackTheme(viewModel = viewModel) {
+                // Existing content...
+            }
+        }
 
         setContent {
             NSUTrackTheme(viewModel = viewModel) {

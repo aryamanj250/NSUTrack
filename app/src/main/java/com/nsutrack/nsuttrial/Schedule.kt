@@ -12,7 +12,8 @@ data class Schedule(
     val endTime: Date,
     val color: Color,
     val room: String? = null,
-    val group: String? = null
+    val group: String? = null,
+    val groups: List<String> = emptyList() // New field for multiple groups
 ) {
     // Get duration in seconds
     val duration: Long
@@ -49,6 +50,54 @@ data class Schedule(
         if (!isCurrentTime(currentTime)) return 0.0
         val elapsed = currentTime.time - startTime.time
         return elapsed.toDouble() / (endTime.time - startTime.time)
+    }
+
+    // Get formatted group text
+    fun getFormattedGroups(): String? {
+        return when {
+            // If we have multiple groups
+            groups.isNotEmpty() -> "Group ${groups.joinToString(", ")}"
+            // If we have only a single group
+            group != null -> if (group.startsWith("Group", ignoreCase = true)) group else "Group $group"
+            // No group info
+            else -> null
+        }
+    }
+
+    // Check if this schedule should be merged with another
+    fun shouldMergeWith(other: Schedule): Boolean {
+        // Check if this is the same subject with adjacent time slots
+        return subject == other.subject &&
+                // Either end time of this matches start time of other, or vice versa
+                ((endTime.time == other.startTime.time) || (startTime.time == other.endTime.time)) &&
+                // Rooms are the same, or at least one is null
+                (room == other.room || room == null || other.room == null)
+    }
+
+    // Merge this schedule with another
+    fun mergeWith(other: Schedule): Schedule {
+        // Determine the earliest start time and latest end time
+        val newStartTime = if (startTime.before(other.startTime)) startTime else other.startTime
+        val newEndTime = if (endTime.after(other.endTime)) endTime else other.endTime
+
+        // Merge group information
+        val newGroups = (this.groups + other.groups).distinct().sorted()
+        val singleGroups = listOfNotNull(this.group, other.group)
+            .filter { !newGroups.contains(it) }
+            .distinct()
+
+        // Combine all groups
+        val finalGroups = (newGroups + singleGroups).distinct().sorted()
+
+        return Schedule(
+            id = id, // Keep the ID of the first schedule
+            subject = subject,
+            startTime = newStartTime,
+            endTime = newEndTime,
+            color = color,
+            room = room ?: other.room, // Take the non-null room if available
+            groups = finalGroups
+        )
     }
 
     companion object {

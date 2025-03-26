@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.google.accompanist.swiperefresh.SwipeRefresh
@@ -35,10 +36,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.ui.unit.IntOffset
 import com.nsutrack.nsuttrial.ui.theme.getAttendanceAdvice
 import com.nsutrack.nsuttrial.ui.theme.getAttendanceStatusColor
 import com.nsutrack.nsuttrial.ui.theme.getReadableTextColor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.*
 import kotlin.math.max
 
@@ -373,50 +377,58 @@ fun HomeScheduleSection(
     val today = days[weekday - 1]
 
     // Process schedule data
-    val todaySchedule = if (timetableData == null) {
-        getSampleSchedule(currentTime)
-    } else {
-        val todayClassSchedules = timetableData!!.schedule[today]
-        todayClassSchedules?.mapNotNull { classSchedule ->
-            val times = parseClassTimes(classSchedule.startTime, classSchedule.endTime, currentTime)
-            if (times == null) {
-                null
-            } else {
-                val (startTime, endTime) = times
-                val color = viewModel.colorForSubject(classSchedule.subject)
-                Schedule(
-                    subject = classSchedule.subjectName ?: classSchedule.subject,
-                    startTime = startTime,
-                    endTime = endTime,
-                    color = color,
-                    room = classSchedule.room,
-                    group = classSchedule.group
-                )
-            }
-        }?.sortedBy { it.startTime } ?: getSampleSchedule(currentTime)
-    }
+    // Process schedule data
+    var todaySchedule by remember { mutableStateOf<List<Schedule>>(emptyList()) }
+    // Process schedule data in a coroutine
 
-    // Scroll to current/upcoming class
-    LaunchedEffect(todaySchedule, currentTime) {
+// Process schedule data in a coroutine
+    LaunchedEffect(timetableData, today, currentTime) {
+        todaySchedule = if (timetableData == null) {
+            getSampleSchedule(currentTime)
+        } else {
+            withContext(Dispatchers.Default) {
+                // Create a local copy of timetableData to use inside withContext
+                val data = timetableData
+                if (data != null) {
+                    processScheduleData(data, viewModel, today, currentTime)
+                } else {
+                    getSampleSchedule(currentTime)
+                }
+            }
+        }
+
+        Log.d("HomeScheduleSection", "Schedule processed: ${todaySchedule.size} items")
+    }
+    // Add this LaunchedEffect right after your existing LaunchedEffect that processes the schedule data
+// Improved auto-scrolling logic with debugging
+    LaunchedEffect(todaySchedule) {
         if (todaySchedule.isNotEmpty()) {
+            // Find current class (class happening right now)
             val currentClass = todaySchedule.firstOrNull { it.isCurrentTime(currentTime) }
+
+            // If no current class, find the next upcoming class
             val nearestUpcoming = if (currentClass == null) {
                 todaySchedule.filter { it.startTime.after(currentTime) }
                     .minByOrNull { it.startTime.time - currentTime.time }
             } else null
 
+            // Use current class if available, otherwise use next upcoming class
             val targetClass = currentClass ?: nearestUpcoming
 
             if (targetClass != null) {
                 val index = todaySchedule.indexOf(targetClass)
                 if (index >= 0) {
-                    coroutineScope.launch {
-                        listState.animateScrollToItem(index)
-                    }
+                    // Add a short delay to ensure LazyRow has properly composed
+                    delay(300)
+                    // Log for debugging
+                    Log.d("AutoScroll", "Scrolling to ${if (currentClass != null) "current" else "upcoming"} class: ${targetClass.subject} at index $index")
+                    // Scroll to the target item
+                    listState.animateScrollToItem(index)
                 }
             }
         }
     }
+// Then your auto-scroll LaunchedEffect would observe this todaySchedule state
 
     Column(
         modifier = Modifier
@@ -462,8 +474,8 @@ fun HomeScheduleSection(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(96.dp),
-                shape = RoundedCornerShape(16.dp),
+                    .height(95.dp),
+                shape = RoundedCornerShape(15.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 ),
@@ -485,7 +497,7 @@ fun HomeScheduleSection(
         } else {
             Box(
                 modifier = Modifier
-                    .height(110.dp)
+                    .height(90.dp)
                     .fillMaxWidth()
             ) {
                 // Schedule cards in horizontal scrollable list
@@ -544,17 +556,17 @@ fun HomeScheduleCard(
     Box(
         modifier = Modifier
             .width((width * animationScale).dp)
-            .height((90 * animationScale).dp)
+            .height((75 * animationScale).dp)
             .shadow(
                 elevation = elevation,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(10.dp),
                 spotColor = schedule.color.copy(alpha = 0.5f)
             )
     ) {
         Card(
             modifier = Modifier
                 .fillMaxSize(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(10.dp),
             colors = CardDefaults.cardColors(
                 containerColor = schedule.color.copy(alpha = 0.9f)
             )
@@ -562,14 +574,14 @@ fun HomeScheduleCard(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(14.dp),
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 // Subject name
                 Text(
                     text = schedule.subject,
                     style = MaterialTheme.typography.titleMedium,
-                    color = textColor.copy(alpha = 0.95f),
+                    color = textColor.copy(alpha = 0.90f),
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1
                 )
@@ -578,55 +590,53 @@ fun HomeScheduleCard(
                 Text(
                     text = schedule.timeRange,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = textColor.copy(alpha = 0.95f),
+                    color = textColor.copy(alpha = 0.90f),
                     maxLines = 1
                 )
 
                 // Room and group info
-                if (schedule.room != null || schedule.group != null) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Room info
-                        if (schedule.room != null) {
-                            val roomText = if (schedule.room.contains(", ")) {
-                                val rooms = schedule.room.split(", ")
-                                if (rooms.size > 2) {
-                                    "${rooms[0]}, ${rooms[1]}..."
-                                } else {
-                                    schedule.room
-                                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Room info
+                    if (schedule.room != null) {
+                        val roomText = if (schedule.room.contains(", ")) {
+                            val rooms = schedule.room.split(", ")
+                            if (rooms.size > 2) {
+                                "${rooms[0]}, ${rooms[1]}..."
                             } else {
                                 schedule.room
                             }
-
-                            Text(
-                                text = roomText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = textColor.copy(alpha = 0.9f),
-                                maxLines = 1
-                            )
+                        } else {
+                            schedule.room
                         }
 
-                        // Separator
-                        if (schedule.room != null && schedule.group != null) {
-                            Text(
-                                text = "•",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = textColor.copy(alpha = 0.7f)
-                            )
-                        }
+                        Text(
+                            text = roomText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = textColor.copy(alpha = 0.9f),
+                            maxLines = 1
+                        )
+                    }
 
-                        // Group info
-                        if (schedule.group != null) {
-                            Text(
-                                text = schedule.group,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = textColor.copy(alpha = 0.9f),
-                                maxLines = 1
-                            )
-                        }
+                    // Separator
+                    if (schedule.room != null && schedule.getFormattedGroups() != null) {
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = textColor.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    // Group info using the method
+                    schedule.getFormattedGroups()?.let { groups ->
+                        Text(
+                            text = groups,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = textColor.copy(alpha = 0.9f),
+                            maxLines = 1
+                        )
                     }
                 }
             }
@@ -636,15 +646,16 @@ fun HomeScheduleCard(
         if (isCurrentClass) {
             Box(
                 modifier = Modifier
-                    .size(12.dp)
+                    .size(8.dp)
                     .align(Alignment.TopEnd)
-                    .offset(x = (-8).dp, y = 8.dp)
+                    .offset(x = (-6).dp, y = 6.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
             )
         }
     }
 }
+
 @Composable
 fun AttendanceCard(
     subject: SubjectData,
@@ -654,119 +665,106 @@ fun AttendanceCard(
 ) {
     var showDetailedView by remember { mutableStateOf(false) }
 
-    val (adviceText, adviceColor) = getAttendanceAdvice(
+    val (adviceText, _) = getAttendanceAdvice(
         subject.overallPresent,
         subject.overallClasses
     )
 
-    val attendanceColor = viewModel.getAttendanceStatusColor(subject.attendancePercentage)
-
-    // Animation for the attendance percentage
-    val animatedPercentage = remember { Animatable(0f) }
-
-    LaunchedEffect(subject.attendancePercentage) {
-        animatedPercentage.animateTo(
-            targetValue = subject.attendancePercentage,
-            animationSpec = tween(1000, easing = FastOutSlowInEasing)
-        )
+    // Get attendance color based on percentage
+    val attendanceColor = when {
+        subject.attendancePercentage >= 85.0f -> Color(0xFF4CAF50) // Green
+        subject.attendancePercentage >= 75.0f -> Color(0xFF8BC34A) // Light Green
+        subject.attendancePercentage >= 65.0f -> Color(0xFFFFC107) // Yellow/Amber
+        subject.attendancePercentage >= 60.0f -> Color(0xFFFF9800) // Orange
+        else -> Color(0xFFE57373) // Soft Red
     }
 
-    Card(  // Changed from ElevatedCard to Card for a flatter look
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable {
-                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                showDetailedView = true
-            },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        // Removed elevation property to minimize shadow
-    ) {
-        Row(
+    Column(modifier = modifier) {
+        // Main content - mimicking iOS style but with Android elements
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .clickable {
+                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                    showDetailedView = true
+                },
+            color = MaterialTheme.colorScheme.surface
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = subject.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = adviceText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = adviceColor
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Progress indicator
-                Box(
+            Column {
+                Row(
                     modifier = Modifier
-                        .height(6.dp)
-                        .fillMaxWidth(0.75f)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp, horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(animatedPercentage.value / 100f)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(attendanceColor)
-                    )
-                }
-            }
+                    // Left section with subject info
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = subject.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Percentage circle
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(attendanceColor.copy(alpha = 0.15f))
-                ) {
-                    Text(
-                        text = "${subject.attendancePercentage.toInt()}%",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = attendanceColor
-                    )
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = adviceText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    // Right section with percentage and arrow
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        // Percentage with colored text (no circle)
+                        Text(
+                            text = "${subject.attendancePercentage.toInt()}%",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = attendanceColor
+                        )
+
+                        // Arrow icon
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "Details",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
                 }
 
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Details",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                // Divider at the bottom of each card, except the last one
+                Divider(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    thickness = 0.5.dp
                 )
             }
         }
     }
 
-    // Show detailed view as a dialog
+    // Show detailed view when requested
     if (showDetailedView) {
         DetailedAttendanceView(
             subject = subject,
             onDismiss = {
-                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
                 showDetailedView = false
             }
         )
     }
 }
+
+
 // Helper function to parse class times
 private fun parseClassTimes(startTimeStr: String, endTimeStr: String, baseDate: Date): Pair<Date, Date>? {
     try {
@@ -799,7 +797,7 @@ private fun parseClassTimes(startTimeStr: String, endTimeStr: String, baseDate: 
 
         return Pair(startTime, endTime)
     } catch (e: Exception) {
-        Log.e("ScheduleSection", "Error parsing times: $startTimeStr-$endTimeStr: ${e.message}")
+        Log.e("HomeScreen", "Error parsing times: $startTimeStr-$endTimeStr: ${e.message}")
         return null
     }
 }
@@ -836,10 +834,15 @@ private fun getSampleSchedule(baseDate: Date): List<Schedule> {
 
 // Calculate width for schedule card based on duration
 private fun calculateWidth(schedule: Schedule): Float {
-    val hourWidth = 160f // Width for a 1-hour class
+    val baseWidth = 160f // Base width for a 1-hour class
+    val minWidth = 160f  // Minimum width for any class
+
     val durationInHours = schedule.duration / 3600f
-    return max(hourWidth, durationInHours * hourWidth) // Ensure minimum width
+
+    // Scale width based on duration, with a minimum
+    return max(minWidth, baseWidth * durationInHours)
 }
+
 // Calculate position for the current time red line
 private fun calculateRedLinePosition(currentTime: Date): Float {
     val hourWidth = 160f // Same scale as card width
@@ -851,7 +854,6 @@ private fun calculateRedLinePosition(currentTime: Date): Float {
     startOfDay.set(Calendar.MINUTE, 0)
     startOfDay.set(Calendar.SECOND, 0)
     startOfDay.set(Calendar.MILLISECOND, 0)
-
     // Calculate elapsed time since start of day in hours
     val elapsedMillis = currentTime.time - startOfDay.timeInMillis
     val elapsedHours = elapsedMillis / (1000 * 60 * 60f)
@@ -861,4 +863,155 @@ private fun calculateRedLinePosition(currentTime: Date): Float {
     } else {
         -100f // Hide line if before academic day start
     }
+}
+
+// Process and merge schedule data - without using @Composable functions
+// Non-composable helper function to generate consistent colors for subjects
+// This replaces the call to viewModel.colorForSubject() which is @Composable
+private fun generateConsistentColorForSubject(subjectCode: String): Color {
+    // Simple hash function to get consistent colors
+    val hash = subjectCode.hashCode()
+    val r = ((hash and 0xFF0000) shr 16) / 255f
+    val g = ((hash and 0x00FF00) shr 8) / 255f
+    val b = (hash and 0x0000FF) / 255f
+
+    // Ensure some level of saturation for good visibility
+    val minSaturation = 0.4f
+    val maxSaturation = 0.8f
+
+    val saturation = minSaturation + (maxSaturation - minSaturation) * ((r + g + b) / 3f)
+
+    // Create a more visually pleasing color with adjusted saturation
+    return Color(
+        red = 0.3f + 0.6f * r,
+        green = 0.3f + 0.6f * g,
+        blue = 0.3f + 0.6f * b,
+        alpha = 1.0f
+    )
+}
+
+// Helper function to merge related schedules
+private fun mergeSchedules(schedules: List<Schedule>): List<Schedule> {
+    if (schedules.isEmpty()) return emptyList()
+
+    val result = mutableListOf<Schedule>()
+    val processedIds = mutableSetOf<String>()
+
+    // First pass - merge time-adjacent classes for the same subject
+    for (i in schedules.indices) {
+        // Skip if already processed
+        if (processedIds.contains(schedules[i].id)) continue
+
+        var current = schedules[i]
+        processedIds.add(current.id)
+
+        // Look for adjacent schedules to merge
+        var madeChanges = true
+        while (madeChanges) {
+            madeChanges = false
+
+            for (j in schedules.indices) {
+                if (processedIds.contains(schedules[j].id)) continue
+
+                if (current.shouldMergeWith(schedules[j])) {
+                    current = current.mergeWith(schedules[j])
+                    processedIds.add(schedules[j].id)
+                    madeChanges = true
+                    break
+                }
+            }
+        }
+
+        result.add(current)
+    }
+
+    // Second pass - merge classes with the same time but different groups
+    val finalResult = mutableListOf<Schedule>()
+    val processedResultIds = mutableSetOf<String>()
+
+    for (i in result.indices) {
+        if (processedResultIds.contains(result[i].id)) continue
+
+        var current = result[i]
+        processedResultIds.add(current.id)
+
+        for (j in result.indices) {
+            if (processedResultIds.contains(result[j].id)) continue
+
+            // If same subject, same time window, but different groups
+            if (current.subject == result[j].subject &&
+                current.startTime.time == result[j].startTime.time &&
+                current.endTime.time == result[j].endTime.time) {
+
+                current = current.mergeWith(result[j])
+                processedResultIds.add(result[j].id)
+            }
+        }
+
+        finalResult.add(current)
+    }
+
+    return finalResult
+}
+
+// Process and merge schedule data
+private fun processScheduleData(
+    timetableData: TimetableData,
+    viewModel: AttendanceViewModel,
+    today: String,
+    currentTime: Date
+): List<Schedule> {
+    // Return sample schedule if no data
+    if (timetableData.schedule.isEmpty()) {
+        return getSampleSchedule(currentTime)
+    }
+
+    // Get today's class schedules
+    val todayClassSchedules = timetableData.schedule[today] ?: return getSampleSchedule(currentTime)
+
+    // Process each class schedule
+    val schedules = todayClassSchedules.mapNotNull { classSchedule ->
+        val timePair = parseClassTimes(
+            classSchedule.startTime,
+            classSchedule.endTime,
+            currentTime
+        ) ?: return@mapNotNull null
+
+        val (startTime, endTime) = timePair
+
+        // Use a non-composable method to get color based on the subject code
+        val color = generateConsistentColorForSubject(classSchedule.subject)
+
+        val subjectName = classSchedule.subjectName ?: classSchedule.subject
+
+        // Process group info - extract group number if available
+        val groupInfo = classSchedule.group?.let {
+            it.trim()
+        }
+
+        // Extract group numbers if they exist
+        val groupNumbers = groupInfo?.let {
+            // If it contains a number after "Group", extract it
+            if (it.contains("Group", ignoreCase = true)) {
+                val numbers = it.replace("Group", "", ignoreCase = true)
+                    .trim().split(",").map { it.trim() }
+                numbers
+            } else {
+                listOf(it) // Just use as is
+            }
+        } ?: emptyList()
+
+        Schedule(
+            subject = subjectName,
+            startTime = startTime,
+            endTime = endTime,
+            color = color,
+            room = classSchedule.room,
+            group = groupInfo,
+            groups = groupNumbers
+        )
+    }
+
+    // Now merge schedules that should be combined
+    return mergeSchedules(schedules).sortedBy { it.startTime }
 }
