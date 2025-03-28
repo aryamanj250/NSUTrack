@@ -1,5 +1,6 @@
 package com.nsutrack.nsuttrial
 
+import PullStretchEffect
 import android.icu.text.SimpleDateFormat
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -31,8 +32,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.google.accompanist.swiperefresh.SwipeRefresh
-import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import android.util.Log
@@ -169,16 +168,8 @@ fun HomeScreen(
                 enter = fadeIn(animationSpec = tween(500)) +
                         slideInVertically(animationSpec = tween(500)) { it / 5 }
             ) {
-                // Wrap the content in SwipeRefresh
-                SwipeRefresh(
-                    state = rememberSwipeRefreshState(isLoading),
-                    onRefresh = {
-                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                        coroutineScope.launch {
-                            viewModel.refreshData()
-                        }
-                    }
-                ) {
+
+                PullStretchEffect {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         state = rememberLazyListState(),
@@ -281,6 +272,7 @@ fun HomeScreen(
                                             Button(
                                                 onClick = {
                                                     hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                                    // Keep manual refresh button for empty state
                                                     coroutineScope.launch {
                                                         viewModel.refreshData()
                                                     }
@@ -349,6 +341,7 @@ fun HomeScreen(
     }
 }
 
+// The rest of the file remains the same...
 @Composable
 fun HomeScheduleSection(
     viewModel: AttendanceViewModel,

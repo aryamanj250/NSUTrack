@@ -760,6 +760,9 @@ class AttendanceViewModel : ViewModel() {
 
             Log.d(TAG, "Starting refresh data flow")
 
+            // Define errorFound variable at the beginning
+            var errorFound = false
+
             try {
                 // First, get a new session regardless of current state
                 initializeSession()
@@ -798,7 +801,6 @@ class AttendanceViewModel : ViewModel() {
 
                     // Check for credential errors
                     var retryCount = 0
-                    var errorFound = false
 
                     while (retryCount < 3) {
                         val currentId = _sessionId.value ?: break
@@ -830,27 +832,72 @@ class AttendanceViewModel : ViewModel() {
                         delay(300) // Brief delay before checking again
                         retryCount++
                     }
-
-                    // If no errors, fetch attendance data
-                    if (!errorFound) {
-                        Log.d(TAG, "Login successful, fetching fresh data with session ID: ${_sessionId.value}")
-                        _isLoggedIn.value = true
-                        fetchAttendanceData()
-                    }
                 } else {
-                    // Try to see if we can fetch data with the existing session
-                    Log.d(TAG, "No stored credentials found, attempting with session only")
+                    // No stored credentials
+                    Log.d(TAG, "No stored credentials found, cannot refresh data")
                     _errorMessage.value = "Please log in to refresh data"
-                    _isLoading.value = false
+                    errorFound = true
+                }
+
+                // Fetch attendance and timetable data if login was successful
+                if (!errorFound) {
+                    Log.d(TAG, "Login successful, refreshing data with session ID: ${_sessionId.value}")
+                    _isLoggedIn.value = true
+
+                    // Sequential fetch to avoid cancellation issues
+                    try {
+                        // Fetch attendance data first
+                        val currentSessionId = _sessionId.value
+                        if (currentSessionId == null) {
+                            Log.e(TAG, "Cannot fetch attendance: Session ID not available")
+                            throw IOException("Session ID not available")
+                        }
+
+                        Log.d(TAG, "Fetching attendance data with session ID: $currentSessionId")
+
+                        // Get attendance data using SSE
+                        val attendanceResponse = apiService.getAttendanceData(currentSessionId)
+
+                        if (attendanceResponse.isSuccessful && attendanceResponse.body() != null) {
+                            // Process the response
+                            val responseBody = attendanceResponse.body()?.string() ?: ""
+                            Log.d(TAG, "Received attendance data response of length: ${responseBody.length}")
+
+                            // SSE responses are formatted as "data: {json}\n\n"
+                            val dataPrefix = "data: "
+                            if (responseBody.contains(dataPrefix)) {
+                                val jsonData = responseBody.substringAfter(dataPrefix).substringBefore("\n")
+                                Log.d(TAG, "Extracted JSON data of length: ${jsonData.length}")
+
+                                // Parse the attendance data
+                                parseAttendanceData(jsonData)
+
+                                _isAttendanceDataLoaded.value = true
+                                Log.d(TAG, "Attendance data loaded successfully")
+                            } else {
+                                throw IOException("Invalid SSE format in response")
+                            }
+                        } else {
+                            Log.e(TAG, "Failed to get attendance data: ${attendanceResponse.code()}")
+                            throw IOException("Failed to get attendance data: ${attendanceResponse.code()}")
+                        }
+
+                        // Then fetch timetable data
+                        fetchTimetableData(forceRefresh = true)
+
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error fetching data during refresh: ${e.message}")
+                        _errorMessage.value = "Error refreshing data: ${e.message}"
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error during refresh: ${e.message}")
                 _errorMessage.value = "Error refreshing data: ${e.message}"
+            } finally {
                 _isLoading.value = false
             }
         }
     }
-
     // Helper function to assign consistent colors to subjects using Material 3 theme
     @Composable
     fun colorForSubject(subjectCode: String): Color {
