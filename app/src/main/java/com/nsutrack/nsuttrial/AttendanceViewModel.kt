@@ -693,12 +693,10 @@ class AttendanceViewModel : ViewModel() {
                     throw IOException("Failed to initialize session")
                 }
 
-                // Use stored credentials to log in again
                 val username = _storedUsername.value
                 val password = _storedPassword.value
 
                 if (username != null && password != null) {
-                    // Submit credentials with new session
                     val loginResponse = apiService.login(
                         LoginRequest(
                             session_id = currentSessionId,
@@ -711,7 +709,6 @@ class AttendanceViewModel : ViewModel() {
                         throw IOException("Login failed with code: ${loginResponse.code()}")
                     }
 
-                    // Check for errors
                     var retryCount = 0
                     while (retryCount < 3) {
                         val sessionId = _sessionId.value ?: break
