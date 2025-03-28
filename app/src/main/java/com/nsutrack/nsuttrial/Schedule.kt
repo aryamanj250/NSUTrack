@@ -115,8 +115,11 @@ data class Schedule(
 }
 
 // Timetable data classes to parse JSON response
+
 data class TimetableData(
-    val schedule: Map<String, List<ClassSchedule>>
+    val schedule: Map<String, List<ClassSchedule>>,
+    // Add a timestamp field to track when this data was fetched
+    val fetchTimestamp: Long = System.currentTimeMillis()
 ) {
     data class ClassSchedule(
         @SerializedName("start_time")
@@ -132,4 +135,12 @@ data class TimetableData(
         @SerializedName("subject_name")
         val subjectName: String? = null
     )
+
+    // Helper method to check if data is stale (older than 5 minutes)
+    fun isStale(): Boolean {
+        val currentTime = System.currentTimeMillis()
+        val dataAge = currentTime - fetchTimestamp
+        val fiveMinutesInMillis = 5 * 60 * 1000 // 5 minutes
+        return dataAge > fiveMinutesInMillis
+    }
 }

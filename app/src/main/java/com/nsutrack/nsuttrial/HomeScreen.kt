@@ -1,5 +1,6 @@
 package com.nsutrack.nsuttrial
 
+import android.icu.text.SimpleDateFormat
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -357,59 +358,144 @@ fun HomeScheduleSection(
     val isTimetableLoading by viewModel.isTimetableLoading.collectAsState()
     val timetableError by viewModel.timetableError.collectAsState()
 
-    // State for current time and timer
-    var currentTime by remember { mutableStateOf(Date()) }
+    // Force refresh of current time on recomposition
+    val currentTime by remember { mutableStateOf(Date()) }
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // Update time every minute
+    // Force update time immediately upon composition
+    var timeState by remember { mutableStateOf(Date()) }
+
+    // Update time every 30 seconds instead of every minute for more responsiveness
     LaunchedEffect(Unit) {
         while (true) {
-            currentTime = Date()
-            delay(60000) // Update every minute
+            timeState = Date() // Use fresh date
+            delay(30000) // 30 second updates
         }
     }
 
-    // Calculate today's day string
-    val calendar = Calendar.getInstance().apply { time = currentTime }
+    // Calculate today's day string - ensure we're getting fresh date info
+    val calendar = Calendar.getInstance()
+    // Force reset to current time
+    calendar.time = Date()
     val weekday = calendar.get(Calendar.DAY_OF_WEEK)
     val days = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
     val today = days[weekday - 1]
 
-    // Process schedule data
+    // Debug logging for day calculation
+    LaunchedEffect(Unit) {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        Log.d("ScheduleSection", "Current Date/Time: ${dateFormat.format(Date())}")
+        Log.d("ScheduleSection", "Today calculated as: $today (day ${weekday})")
+    }
+
     // Process schedule data
     var todaySchedule by remember { mutableStateOf<List<Schedule>>(emptyList()) }
-    // Process schedule data in a coroutine
 
-// Process schedule data in a coroutine
-    LaunchedEffect(timetableData, today, currentTime) {
-        todaySchedule = if (timetableData == null) {
-            getSampleSchedule(currentTime)
-        } else {
-            withContext(Dispatchers.Default) {
-                // Create a local copy of timetableData to use inside withContext
+    // Force a refresh of timetable data when component is shown
+    LaunchedEffect(Unit) {
+        if (!isTimetableLoading) {
+            Log.d("ScheduleSection", "Forcing timetable refresh")
+            viewModel.fetchTimetableData()
+        }
+    }
+
+    // Process schedule data with improved error handling
+    // Key on timeState to ensure we refresh when time updates
+    LaunchedEffect(timetableData, today, timeState) {
+        withContext(Dispatchers.Default) {
+            try {
                 val data = timetableData
                 if (data != null) {
-                    processScheduleData(data, viewModel, today, currentTime)
+                    // Log full schedule data for debugging
+                    val availableDays = data.schedule.keys.joinToString(", ")
+                    Log.d("ScheduleSection", "Available schedule days: $availableDays")
+
+                    // Get today's class schedules
+                    val todayClassSchedules = data.schedule[today]
+
+                    if (todayClassSchedules != null && todayClassSchedules.isNotEmpty()) {
+                        Log.d("ScheduleSection", "Found ${todayClassSchedules.size} classes for $today")
+
+                        // Process each class schedule
+                        val schedules = todayClassSchedules.mapNotNull { classSchedule ->
+                            try {
+                                // Log the raw class data
+                                Log.d("ScheduleSection", "Processing class: ${classSchedule.subject} at ${classSchedule.startTime}-${classSchedule.endTime}")
+
+                                // Parse class times with current date for accurate comparison
+                                val timePair = parseClassTimes(
+                                    classSchedule.startTime,
+                                    classSchedule.endTime,
+                                    Date() // Always use fresh date
+                                ) ?: return@mapNotNull null
+
+                                val (startTime, endTime) = timePair
+
+                                // Generate a consistent color based on subject code
+                                val color = generateConsistentColor(classSchedule.subject)
+
+                                // Extract group numbers if they exist
+                                val groupInfo = classSchedule.group?.trim()
+                                val groupNumbers = groupInfo?.let {
+                                    if (it.contains("Group", ignoreCase = true)) {
+                                        it.replace("Group", "", ignoreCase = true)
+                                            .trim().split(",").map { it.trim() }
+                                    } else {
+                                        listOf(it)
+                                    }
+                                } ?: emptyList()
+
+                                Schedule(
+                                    subject = classSchedule.subjectName ?: classSchedule.subject,
+                                    startTime = startTime,
+                                    endTime = endTime,
+                                    color = color,
+                                    room = classSchedule.room,
+                                    group = groupInfo,
+                                    groups = groupNumbers
+                                )
+                            } catch (e: Exception) {
+                                Log.e("ScheduleSection", "Error processing class: ${e.message}")
+                                null
+                            }
+                        }
+
+                        // Now merge schedules that should be combined
+                        todaySchedule = mergeSchedules(schedules).sortedBy { it.startTime }
+                        Log.d("ScheduleSection", "Final schedule count: ${todaySchedule.size}")
+                        return@withContext
+                    } else {
+                        Log.d("ScheduleSection", "No schedules found for $today")
+                    }
                 } else {
-                    getSampleSchedule(currentTime)
+                    Log.d("ScheduleSection", "Timetable data is null")
                 }
+
+                // Fallback to sample schedule
+                todaySchedule = getSampleSchedule(Date())
+            } catch (e: Exception) {
+                Log.e("ScheduleSection", "Error processing schedule data: ${e.message}")
+                e.printStackTrace()
+                todaySchedule = getSampleSchedule(Date())
             }
         }
-
-        Log.d("HomeScheduleSection", "Schedule processed: ${todaySchedule.size} items")
     }
-    // Add this LaunchedEffect right after your existing LaunchedEffect that processes the schedule data
-// Improved auto-scrolling logic with debugging
-    LaunchedEffect(todaySchedule) {
+
+    // Improved auto-scrolling logic with delay
+    LaunchedEffect(todaySchedule, timeState) {
         if (todaySchedule.isNotEmpty()) {
+            // Make sure the LazyRow has composed
+            delay(300)
+
             // Find current class (class happening right now)
-            val currentClass = todaySchedule.firstOrNull { it.isCurrentTime(currentTime) }
+            val freshCurrentTime = Date() // Always use fresh time
+            val currentClass = todaySchedule.firstOrNull { it.isCurrentTime(freshCurrentTime) }
 
             // If no current class, find the next upcoming class
             val nearestUpcoming = if (currentClass == null) {
-                todaySchedule.filter { it.startTime.after(currentTime) }
-                    .minByOrNull { it.startTime.time - currentTime.time }
+                todaySchedule.filter { it.startTime.after(freshCurrentTime) }
+                    .minByOrNull { it.startTime.time - freshCurrentTime.time }
             } else null
 
             // Use current class if available, otherwise use next upcoming class
@@ -418,17 +504,16 @@ fun HomeScheduleSection(
             if (targetClass != null) {
                 val index = todaySchedule.indexOf(targetClass)
                 if (index >= 0) {
-                    // Add a short delay to ensure LazyRow has properly composed
-                    delay(300)
-                    // Log for debugging
                     Log.d("AutoScroll", "Scrolling to ${if (currentClass != null) "current" else "upcoming"} class: ${targetClass.subject} at index $index")
-                    // Scroll to the target item
-                    listState.animateScrollToItem(index)
+                    try {
+                        listState.animateScrollToItem(index)
+                    } catch (e: Exception) {
+                        Log.e("AutoScroll", "Error scrolling: ${e.message}")
+                    }
                 }
             }
         }
     }
-// Then your auto-scroll LaunchedEffect would observe this todaySchedule state
 
     Column(
         modifier = Modifier
@@ -510,7 +595,7 @@ fun HomeScheduleSection(
                         items = todaySchedule,
                         key = { it.id }
                     ) { schedule ->
-                        val isCurrentClass = schedule.isCurrentTime(currentTime)
+                        val isCurrentClass = schedule.isCurrentTime(Date()) // Fresh time check
 
                         // Apply scaling animation to current class
                         val scale by animateFloatAsState(
@@ -532,7 +617,7 @@ fun HomeScheduleSection(
                 }
 
                 // Red line indicator for current time
-                val redLinePosition = calculateRedLinePosition(currentTime)
+                val redLinePosition = calculateRedLinePosition(Date()) // Fresh time
                 if (redLinePosition > 0) {
                     RedLineIndicator(position = redLinePosition)
                 }
@@ -541,6 +626,58 @@ fun HomeScheduleSection(
     }
 }
 
+// Helper function to parse class times - updated to be more robust
+private fun parseClassTimes(startTimeStr: String, endTimeStr: String, baseDate: Date): Pair<Date, Date>? {
+    try {
+        if (!startTimeStr.contains(":") || !endTimeStr.contains(":")) {
+            Log.w("TimeParser", "Invalid time format: $startTimeStr-$endTimeStr")
+            return null
+        }
+
+        val startComponents = startTimeStr.split(":")
+        val endComponents = endTimeStr.split(":")
+
+        if (startComponents.size != 2 || endComponents.size != 2) {
+            Log.w("TimeParser", "Invalid time components: $startComponents / $endComponents")
+            return null
+        }
+
+        var startHour = startComponents[0].toInt()
+        val startMinute = startComponents[1].toInt()
+        var endHour = endComponents[0].toInt()
+        val endMinute = endComponents[1].toInt()
+
+        // Convert times like "01:00" to 13:00 for afternoon classes
+        if (startHour < 9 && startHour != 12) {
+            startHour += 12
+        }
+        if (endHour < 9 && endHour != 12) {
+            endHour += 12
+        }
+
+        // Use fresh baseDate for today's date
+        val today = Calendar.getInstance().apply {
+            time = baseDate
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.time
+
+        val startTime = Schedule.createTimeForToday(startHour, startMinute, today)
+        val endTime = Schedule.createTimeForToday(endHour, endMinute, today)
+
+        // Debug log the times
+        val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+        Log.d("TimeParser", "Parsed $startTimeStr-$endTimeStr to ${dateFormat.format(startTime)}-${dateFormat.format(endTime)}")
+
+        return Pair(startTime, endTime)
+    } catch (e: Exception) {
+        Log.e("TimeParser", "Error parsing times: $startTimeStr-$endTimeStr: ${e.message}")
+        e.printStackTrace()
+        return null
+    }
+}
 @Composable
 fun HomeScheduleCard(
     schedule: Schedule,
@@ -764,124 +901,15 @@ fun AttendanceCard(
     }
 }
 
-
-// Helper function to parse class times
-private fun parseClassTimes(startTimeStr: String, endTimeStr: String, baseDate: Date): Pair<Date, Date>? {
-    try {
-        if (!startTimeStr.contains(":") || !endTimeStr.contains(":")) {
-            return null
-        }
-
-        val startComponents = startTimeStr.split(":")
-        val endComponents = endTimeStr.split(":")
-
-        if (startComponents.size != 2 || endComponents.size != 2) {
-            return null
-        }
-
-        var startHour = startComponents[0].toInt()
-        val startMinute = startComponents[1].toInt()
-        var endHour = endComponents[0].toInt()
-        val endMinute = endComponents[1].toInt()
-
-        // Convert times like "01:00" to 13:00 for afternoon classes
-        if (startHour < 9 && startHour != 12) {
-            startHour += 12
-        }
-        if (endHour < 9 && endHour != 12) {
-            endHour += 12
-        }
-
-        val startTime = Schedule.createTimeForToday(startHour, startMinute, baseDate)
-        val endTime = Schedule.createTimeForToday(endHour, endMinute, baseDate)
-
-        return Pair(startTime, endTime)
-    } catch (e: Exception) {
-        Log.e("HomeScreen", "Error parsing times: $startTimeStr-$endTimeStr: ${e.message}")
-        return null
-    }
-}
-
-// Sample schedule data when no real data is available
-private fun getSampleSchedule(baseDate: Date): List<Schedule> {
-    return listOf(
-        Schedule(
-            subject = "Discrete Structures",
-            startTime = Schedule.createTimeForToday(9, 0, baseDate),
-            endTime = Schedule.createTimeForToday(10, 0, baseDate),
-            color = Color(0xFF78909C) // Blue Gray
-        ),
-        Schedule(
-            subject = "Computer Programming",
-            startTime = Schedule.createTimeForToday(10, 0, baseDate),
-            endTime = Schedule.createTimeForToday(11, 0, baseDate),
-            color = Color(0xFF66BB6A) // Green
-        ),
-        Schedule(
-            subject = "Mathematics-II",
-            startTime = Schedule.createTimeForToday(11, 0, baseDate),
-            endTime = Schedule.createTimeForToday(12, 0, baseDate),
-            color = Color(0xFF9575CD) // Purple
-        ),
-        Schedule(
-            subject = "Network Analysis and Synthesis",
-            startTime = Schedule.createTimeForToday(12, 0, baseDate),
-            endTime = Schedule.createTimeForToday(13, 0, baseDate),
-            color = Color(0xFF4FC3F7) // Light Blue
-        )
-    )
-}
-
-// Calculate width for schedule card based on duration
-private fun calculateWidth(schedule: Schedule): Float {
-    val baseWidth = 160f // Base width for a 1-hour class
-    val minWidth = 160f  // Minimum width for any class
-
-    val durationInHours = schedule.duration / 3600f
-
-    // Scale width based on duration, with a minimum
-    return max(minWidth, baseWidth * durationInHours)
-}
-
-// Calculate position for the current time red line
-private fun calculateRedLinePosition(currentTime: Date): Float {
-    val hourWidth = 160f // Same scale as card width
-
-    // Define start of day (9:00 AM for academic schedule)
-    val startOfDay = Calendar.getInstance()
-    startOfDay.time = currentTime
-    startOfDay.set(Calendar.HOUR_OF_DAY, 9)
-    startOfDay.set(Calendar.MINUTE, 0)
-    startOfDay.set(Calendar.SECOND, 0)
-    startOfDay.set(Calendar.MILLISECOND, 0)
-    // Calculate elapsed time since start of day in hours
-    val elapsedMillis = currentTime.time - startOfDay.timeInMillis
-    val elapsedHours = elapsedMillis / (1000 * 60 * 60f)
-
-    return if (elapsedHours > 0) {
-        elapsedHours * hourWidth + 16f // 16dp padding offset
-    } else {
-        -100f // Hide line if before academic day start
-    }
-}
-
-// Process and merge schedule data - without using @Composable functions
-// Non-composable helper function to generate consistent colors for subjects
-// This replaces the call to viewModel.colorForSubject() which is @Composable
-private fun generateConsistentColorForSubject(subjectCode: String): Color {
+// Helper function to generate consistent colors for subjects
+private fun generateConsistentColor(subjectCode: String): Color {
     // Simple hash function to get consistent colors
     val hash = subjectCode.hashCode()
     val r = ((hash and 0xFF0000) shr 16) / 255f
     val g = ((hash and 0x00FF00) shr 8) / 255f
     val b = (hash and 0x0000FF) / 255f
 
-    // Ensure some level of saturation for good visibility
-    val minSaturation = 0.4f
-    val maxSaturation = 0.8f
-
-    val saturation = minSaturation + (maxSaturation - minSaturation) * ((r + g + b) / 3f)
-
-    // Create a more visually pleasing color with adjusted saturation
+    // Ensure good color saturation
     return Color(
         red = 0.3f + 0.6f * r,
         green = 0.3f + 0.6f * g,
@@ -889,6 +917,8 @@ private fun generateConsistentColorForSubject(subjectCode: String): Color {
         alpha = 1.0f
     )
 }
+
+// Helper function to parse class times
 
 // Helper function to merge related schedules
 private fun mergeSchedules(schedules: List<Schedule>): List<Schedule> {
@@ -954,64 +984,67 @@ private fun mergeSchedules(schedules: List<Schedule>): List<Schedule> {
     return finalResult
 }
 
-// Process and merge schedule data
-private fun processScheduleData(
-    timetableData: TimetableData,
-    viewModel: AttendanceViewModel,
-    today: String,
-    currentTime: Date
-): List<Schedule> {
-    // Return sample schedule if no data
-    if (timetableData.schedule.isEmpty()) {
-        return getSampleSchedule(currentTime)
-    }
-
-    // Get today's class schedules
-    val todayClassSchedules = timetableData.schedule[today] ?: return getSampleSchedule(currentTime)
-
-    // Process each class schedule
-    val schedules = todayClassSchedules.mapNotNull { classSchedule ->
-        val timePair = parseClassTimes(
-            classSchedule.startTime,
-            classSchedule.endTime,
-            currentTime
-        ) ?: return@mapNotNull null
-
-        val (startTime, endTime) = timePair
-
-        // Use a non-composable method to get color based on the subject code
-        val color = generateConsistentColorForSubject(classSchedule.subject)
-
-        val subjectName = classSchedule.subjectName ?: classSchedule.subject
-
-        // Process group info - extract group number if available
-        val groupInfo = classSchedule.group?.let {
-            it.trim()
-        }
-
-        // Extract group numbers if they exist
-        val groupNumbers = groupInfo?.let {
-            // If it contains a number after "Group", extract it
-            if (it.contains("Group", ignoreCase = true)) {
-                val numbers = it.replace("Group", "", ignoreCase = true)
-                    .trim().split(",").map { it.trim() }
-                numbers
-            } else {
-                listOf(it) // Just use as is
-            }
-        } ?: emptyList()
-
+// Sample schedule data when no real data is available
+private fun getSampleSchedule(baseDate: Date): List<Schedule> {
+    return listOf(
         Schedule(
-            subject = subjectName,
-            startTime = startTime,
-            endTime = endTime,
-            color = color,
-            room = classSchedule.room,
-            group = groupInfo,
-            groups = groupNumbers
+            subject = "Discrete Structures",
+            startTime = Schedule.createTimeForToday(9, 0, baseDate),
+            endTime = Schedule.createTimeForToday(10, 0, baseDate),
+            color = Color(0xFF78909C) // Blue Gray
+        ),
+        Schedule(
+            subject = "Computer Programming",
+            startTime = Schedule.createTimeForToday(10, 0, baseDate),
+            endTime = Schedule.createTimeForToday(11, 0, baseDate),
+            color = Color(0xFF66BB6A) // Green
+        ),
+        Schedule(
+            subject = "Mathematics-II",
+            startTime = Schedule.createTimeForToday(11, 0, baseDate),
+            endTime = Schedule.createTimeForToday(12, 0, baseDate),
+            color = Color(0xFF9575CD) // Purple
+        ),
+        Schedule(
+            subject = "Network Analysis and Synthesis",
+            startTime = Schedule.createTimeForToday(12, 0, baseDate),
+            endTime = Schedule.createTimeForToday(13, 0, baseDate),
+            color = Color(0xFF4FC3F7) // Light Blue
         )
-    }
-
-    // Now merge schedules that should be combined
-    return mergeSchedules(schedules).sortedBy { it.startTime }
+    )
 }
+
+// Calculate width for schedule card based on duration
+private fun calculateWidth(schedule: Schedule): Float {
+    val baseWidth = 160f // Base width for a 1-hour class
+    val minWidth = 160f  // Minimum width for any class
+
+    val durationInHours = schedule.duration / 3600f
+
+    // Scale width based on duration, with a minimum
+    return max(minWidth, baseWidth * durationInHours)
+}
+
+// Calculate position for the current time red line
+private fun calculateRedLinePosition(currentTime: Date): Float {
+    val hourWidth = 160f // Same scale as card width
+
+    // Define start of day (9:00 AM for academic schedule)
+    val startOfDay = Calendar.getInstance()
+    startOfDay.time = currentTime
+    startOfDay.set(Calendar.HOUR_OF_DAY, 9)
+    startOfDay.set(Calendar.MINUTE, 0)
+    startOfDay.set(Calendar.SECOND, 0)
+    startOfDay.set(Calendar.MILLISECOND, 0)
+
+    // Calculate elapsed time since start of day in hours
+    val elapsedMillis = currentTime.time - startOfDay.timeInMillis
+    val elapsedHours = elapsedMillis / (1000 * 60 * 60f)
+
+    return if (elapsedHours > 0) {
+        elapsedHours * hourWidth + 16f // 16dp padding offset
+    } else {
+        -100f // Hide line if before academic day start
+    }
+}
+

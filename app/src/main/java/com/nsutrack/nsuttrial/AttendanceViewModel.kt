@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.core.content.edit
 import com.google.gson.annotations.SerializedName
 import com.nsutrack.nsuttrial.ui.theme.generateConsistentColor
+import java.util.Calendar
 
 class AttendanceViewModel : ViewModel() {
     // Tag for logging
@@ -559,14 +560,26 @@ class AttendanceViewModel : ViewModel() {
     }
 
     // Fetch timetable data
-    fun fetchTimetableData() {
+    // Add this to AttendanceViewModel.kt to refresh timetable data more aggressively
+    // Add these to your AttendanceViewModel.kt to enhance timetable management
+
+    // Replace your existing fetchTimetableData method with this enhanced version
+    fun fetchTimetableData(forceRefresh: Boolean = false) {
         if (activeTimetableJob != null) {
             activeTimetableJob?.cancel()
+        }
+
+        // Skip if already loaded and not forcing refresh
+        if (!forceRefresh && _timetableData.value != null && !(_timetableData.value?.isStale() ?: true)) {
+            Log.d(TAG, "Using cached timetable data (not stale)")
+            return
         }
 
         activeTimetableJob = viewModelScope.launch {
             _isTimetableLoading.value = true
             _timetableError.value = null
+
+            Log.d(TAG, "Starting timetable data fetch (force: $forceRefresh)")
 
             try {
                 val currentSessionId = _sessionId.value
@@ -606,12 +619,33 @@ class AttendanceViewModel : ViewModel() {
                                 // Not an error object, continue with normal parsing
                             }
 
-                            // Parse the timetable data
-                            val timetableData = gson.fromJson(jsonData, TimetableData::class.java)
-                            Log.d(TAG, "Successfully parsed timetable data")
-                            _timetableData.value = timetableData
+                            // Parse the timetable data, ensuring we set the current timestamp
+                            val baseData = gson.fromJson(jsonData, TimetableData::class.java)
+
+                            // Create a new instance with current timestamp
+                            val freshData = TimetableData(
+                                schedule = baseData.schedule,
+                                fetchTimestamp = System.currentTimeMillis()
+                            )
+
+                            // Log days available in schedule
+                            val days = freshData.schedule.keys.joinToString(", ")
+                            val currentDay = getCurrentDayAbbreviation()
+
+                            Log.d(TAG, "Successfully parsed timetable with days: $days")
+                            Log.d(TAG, "Current day is: $currentDay")
+
+                            if (currentDay in freshData.schedule.keys) {
+                                val classes = freshData.schedule[currentDay]?.size ?: 0
+                                Log.d(TAG, "Found $classes classes for today ($currentDay)")
+                            } else {
+                                Log.w(TAG, "No schedule data for today ($currentDay)")
+                            }
+
+                            _timetableData.value = freshData
                         } catch (e: Exception) {
                             Log.e(TAG, "Error parsing timetable JSON: ${e.message}")
+                            e.printStackTrace()
                             _timetableError.value = "Failed to parse timetable data: ${e.message}"
                         }
                     } else {
@@ -624,6 +658,7 @@ class AttendanceViewModel : ViewModel() {
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error fetching timetable data: ${e.message}")
+                e.printStackTrace()
                 _timetableError.value = "Error fetching timetable data: ${e.message}"
             } finally {
                 _isTimetableLoading.value = false
@@ -632,6 +667,94 @@ class AttendanceViewModel : ViewModel() {
         }
     }
 
+    // Helper method to get current day abbreviation
+    private fun getCurrentDayAbbreviation(): String {
+        val calendar = Calendar.getInstance()
+        val days = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+        val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+        return days[dayOfWeek - 1]
+    }
+
+    // Add this method to force refresh all data including timetable
+    fun forceRefreshAllData() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _errorMessage.value = ""
+
+            try {
+                // First, get a new session
+                initializeSession()
+
+                // Wait for session initialization
+                delay(500)
+
+                val currentSessionId = _sessionId.value
+                if (currentSessionId == null) {
+                    throw IOException("Failed to initialize session")
+                }
+
+                // Use stored credentials to log in again
+                val username = _storedUsername.value
+                val password = _storedPassword.value
+
+                if (username != null && password != null) {
+                    // Submit credentials with new session
+                    val loginResponse = apiService.login(
+                        LoginRequest(
+                            session_id = currentSessionId,
+                            uid = username,
+                            pwd = password
+                        )
+                    )
+
+                    if (!loginResponse.isSuccessful) {
+                        throw IOException("Login failed with code: ${loginResponse.code()}")
+                    }
+
+                    // Check for errors
+                    var retryCount = 0
+                    while (retryCount < 3) {
+                        val sessionId = _sessionId.value ?: break
+                        val errorResponse = apiService.checkLoginErrors(sessionId)
+
+                        if (errorResponse.has("error")) {
+                            val errorMessage = errorResponse.get("error").asString
+                            throw IOException(errorMessage)
+                        }
+
+                        if (errorResponse.has("status") && errorResponse.get("status").asString == "no_errors") {
+                            break
+                        }
+
+                        delay(300)
+                        retryCount++
+                    }
+
+                    // Reset values to trigger fresh fetches
+                    _timetableData.value = null
+                    _profileData.value = null
+                    _subjectData.value = emptyList()
+
+                    // Mark as logged in and fetch fresh data
+                    _isLoggedIn.value = true
+
+                    // Fetch attendance first (this is required by your original logic)
+                    fetchAttendanceData()
+
+                    // Then fetch timetable and profile with force refresh
+                    fetchTimetableData(forceRefresh = true)
+                    fetchProfileData()
+                } else {
+                    throw IOException("No stored credentials")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Force refresh error: ${e.message}")
+                _errorMessage.value = "Error refreshing data: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
     // Improved Pull-to-refresh functionality with credential resubmission
     fun refreshData() {
         viewModelScope.launch {
