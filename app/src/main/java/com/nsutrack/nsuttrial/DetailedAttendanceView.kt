@@ -114,6 +114,7 @@ fun DetailedAttendanceView(
     }
 
     // Full screen dialog with animations
+    // Replace the Dialog and AnimatedVisibility section with this code
     Dialog(
         onDismissRequest = {
             coroutineScope.launch {
@@ -124,121 +125,163 @@ fun DetailedAttendanceView(
         },
         properties = DialogProperties(
             dismissOnBackPress = true,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false  // Make it full width
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
         )
     ) {
-        AnimatedVisibility(
-            visibleState = visible,
-            enter = slideInVertically(
-                initialOffsetY = { it }, // Start from below the screen (full height down)
-                animationSpec = tween(350, easing = EaseOutQuart)
-            ) + fadeIn(animationSpec = tween(300)),
-            exit = slideOutVertically(
-                targetOffsetY = { it }, // Exit to below the screen (full height down)
-                animationSpec = tween(300, easing = EaseInQuart)
-            ) + fadeOut(animationSpec = tween(250))
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.BottomCenter
         ) {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = {
-                            // Center-align the title
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = subject.name,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    // Remove maxLines and overflow to always show full title
-                                    fontWeight = FontWeight.SemiBold,
-                                    textAlign = TextAlign.Center  // Center the text
-                                )
-                            }
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = {
-                                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                                coroutineScope.launch {
-                                    visible.targetState = false
-                                    delay(300)
-                                    onDismiss()
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            titleContentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        // This ensures our title is actually centered
-                        actions = {
-                            // Empty action to balance the nav icon
-                            IconButton(onClick = { /* do nothing */ }, enabled = false) {
-                                Box(modifier = Modifier.size(24.dp))
-                            }
-                        }
-                    )
-                }
-            ) { paddingValues ->
-                Surface(
+            // Semi-transparent background
+            AnimatedVisibility(
+                visible = visible.targetState,
+                enter = fadeIn(animationSpec = tween(300)),
+                exit = fadeOut(animationSpec = tween(300))
+            ) {
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(paddingValues),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    when {
-                        filteredRecords.isEmpty() -> {
-                            // Empty state
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "No attendance records available",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .clickable {
+                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                            coroutineScope.launch {
+                                visible.targetState = false
+                                delay(300)
+                                onDismiss()
                             }
                         }
-                        else -> {
-                            // Attendance data
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    top = 8.dp,
-                                    bottom = 24.dp
+                )
+            }
+
+            // Card content with animation
+            AnimatedVisibility(
+                visibleState = visible,
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = tween(400, easing = EaseOutQuart)
+                ) + fadeIn(animationSpec = tween(350)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = tween(300, easing = EaseInQuart)
+                ) + fadeOut(animationSpec = tween(200))
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.8f)
+                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                    color = MaterialTheme.colorScheme.background,
+                    shadowElevation = 8.dp
+                ) {
+                    // Keep the Scaffold within the Surface
+                    Scaffold(
+                        topBar = {
+                            TopAppBar(
+                                title = {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = subject.name,
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.SemiBold,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                },
+                                navigationIcon = {
+                                    IconButton(onClick = {
+                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                        coroutineScope.launch {
+                                            visible.targetState = false
+                                            delay(300)
+                                            onDismiss()
+                                        }
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = "Back",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                },
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                    titleContentColor = MaterialTheme.colorScheme.onSurface
                                 ),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                item {
-                                    AttendanceHeader(subject)
+                                actions = {
+                                    IconButton(onClick = { /* do nothing */ }, enabled = false) {
+                                        Box(modifier = Modifier.size(24.dp))
+                                    }
+                                }
+                            )
+                        }
+                    ) { paddingValues ->
+                        // Rest of your content remains the same
+                        // Just pass paddingValues to content
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(paddingValues),
+                            color = MaterialTheme.colorScheme.background
+                        ) {
+                            // Your existing content here
+                            when {
+                                filteredRecords.isEmpty() -> {
+                                    // Empty state
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "No attendance records available",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                    }
                                 }
 
-                                items(sortedGroups) { (month, monthRecords) ->
-                                    MonthSection(
-                                        month = month,
-                                        records = monthRecords.sortedByDescending {
-                                            it.date.split("-").getOrNull(1)?.toIntOrNull() ?: 0
-                                        },
-                                        isExpanded = expandedMonths.value.contains(month),
-                                        onToggle = {
-                                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                                            expandedMonths.value = if (expandedMonths.value.contains(month)) {
-                                                expandedMonths.value - month
-                                            } else {
-                                                expandedMonths.value + month
-                                            }
+                                else -> {
+                                    // Attendance data
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentPadding = PaddingValues(
+                                            start = 16.dp,
+                                            end = 16.dp,
+                                            top = 8.dp,
+                                            bottom = 24.dp
+                                        ),
+                                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        item {
+                                            AttendanceHeader(subject)
                                         }
-                                    )
+
+                                        items(sortedGroups) { (month, monthRecords) ->
+                                            MonthSection(
+                                                month = month,
+                                                records = monthRecords.sortedByDescending {
+                                                    it.date.split("-").getOrNull(1)?.toIntOrNull()
+                                                        ?: 0
+                                                },
+                                                isExpanded = expandedMonths.value.contains(month),
+                                                onToggle = {
+                                                    hapticFeedback.performHapticFeedback(
+                                                        HapticFeedback.FeedbackType.LIGHT
+                                                    )
+                                                    expandedMonths.value =
+                                                        if (expandedMonths.value.contains(month)) {
+                                                            expandedMonths.value - month
+                                                        } else {
+                                                            expandedMonths.value + month
+                                                        }
+                                                }
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -248,266 +291,271 @@ fun DetailedAttendanceView(
         }
     }
 }
-
-@Composable
-fun AttendanceHeader(subject: SubjectData) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Remove the circle with percentage here - it's now gone!
-
-        // Keep the stats row
-        Row(
+    @Composable
+    fun AttendanceHeader(subject: SubjectData) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "${subject.overallClasses}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "Total",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            // Remove the circle with percentage here - it's now gone!
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "${subject.overallPresent}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF4CAF50)
-                )
-                Text(
-                    text = "Present",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "${subject.overallAbsent}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFE57373)
-                )
-                Text(
-                    text = "Absent",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Attendance advice card with contextual colors
-        val targetPercentage = 75.0
-        val currentPercentage = subject.attendancePercentage
-
-        val adviceText = if (currentPercentage >= targetPercentage) {
-            val classesCanSkip = ((subject.overallPresent * 100 / targetPercentage) - subject.overallClasses).toInt()
-            "You can skip next $classesCanSkip classes"
-        } else {
-            val classesNeeded = Math.ceil(((targetPercentage * subject.overallClasses - 100 * subject.overallPresent) / (100 - targetPercentage))).toInt()
-            "You need to attend next $classesNeeded classes"
-        }
-
-        val bgColor = if (currentPercentage >= targetPercentage) {
-            Color(0xFFE8F5E9) // Light Green
-        } else {
-            Color(0xFFFFEBEE) // Light Red
-        }
-
-        val textColor = if (currentPercentage >= targetPercentage) {
-            Color(0xFF2E7D32) // Dark Green
-        } else {
-            Color(0xFFD32F2F) // Dark Red
-        }
-
-        val borderColor = if (currentPercentage >= targetPercentage) {
-            Color(0xFF81C784) // Green
-        } else {
-            Color(0xFFEF5350) // Red
-        }
-
-        // Advice card with styled border and colors
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .border(
-                    width = 1.dp,
-                    color = borderColor,
-                    shape = RoundedCornerShape(16.dp)
-                ),
-            color = bgColor,
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Text(
-                text = adviceText,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(16.dp),
-                color = textColor,
-                fontWeight = FontWeight.Medium,
-                style = MaterialTheme.typography.bodyLarge
-            )
-        }
-    }
-}
-@Composable
-fun MonthSection(
-    month: String,
-    records: List<AttendanceRecord>,
-    isExpanded: Boolean,
-    onToggle: () -> Unit
-) {
-    // Count classes by type for the header display
-    val presentCount = records.count { it.status == "1" || it.status == "1+1" || it.status == "0+1" || it.status == "1+0" }
-    val absentCount = records.count { it.status == "0" || it.status == "0+0" }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // Month header with ripple effect and class count
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onToggle),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
-        ) {
+            // Keep the stats row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 14.dp, horizontal = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = month,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
-                        text = "${records.size} CLASSES",
+                        text = "${subject.overallClasses}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Total",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
 
-                    val rotation by animateFloatAsState(
-                        targetValue = if (isExpanded) 180f else 0f,
-                        label = "Arrow Rotation"
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "${subject.overallPresent}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF4CAF50)
                     )
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (isExpanded) "Collapse" else "Expand",
-                        modifier = Modifier
-                            .padding(start = 12.dp)
-                            .rotate(rotation),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    Text(
+                        text = "Present",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "${subject.overallAbsent}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFE57373)
+                    )
+                    Text(
+                        text = "Absent",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-        }
 
-        // Records
-        AnimatedVisibility(
-            visible = isExpanded,
-            enter = expandVertically(
-                expandFrom = Alignment.Top,
-                animationSpec = tween(300)
-            ) + fadeIn(animationSpec = tween(300)),
-            exit = shrinkVertically(
-                shrinkTowards = Alignment.Top,
-                animationSpec = tween(300)
-            ) + fadeOut(animationSpec = tween(300))
-        ) {
-            Column(
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Attendance advice card with contextual colors
+            val targetPercentage = 75.0
+            val currentPercentage = subject.attendancePercentage
+
+            val adviceText = if (currentPercentage >= targetPercentage) {
+                val classesCanSkip =
+                    ((subject.overallPresent * 100 / targetPercentage) - subject.overallClasses).toInt()
+                "You can skip next $classesCanSkip classes"
+            } else {
+                val classesNeeded =
+                    Math.ceil(((targetPercentage * subject.overallClasses - 100 * subject.overallPresent) / (100 - targetPercentage)))
+                        .toInt()
+                "You need to attend next $classesNeeded classes"
+            }
+
+            val bgColor = if (currentPercentage >= targetPercentage) {
+                Color(0xFFE8F5E9) // Light Green
+            } else {
+                Color(0xFFFFEBEE) // Light Red
+            }
+
+            val textColor = if (currentPercentage >= targetPercentage) {
+                Color(0xFF2E7D32) // Dark Green
+            } else {
+                Color(0xFFD32F2F) // Dark Red
+            }
+
+            val borderColor = if (currentPercentage >= targetPercentage) {
+                Color(0xFF81C784) // Green
+            } else {
+                Color(0xFFEF5350) // Red
+            }
+
+            // Advice card with styled border and colors
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 16.dp)
+                    .border(
+                        width = 1.dp,
+                        color = borderColor,
+                        shape = RoundedCornerShape(16.dp)
+                    ),
+                color = bgColor,
+                shape = RoundedCornerShape(16.dp)
             ) {
-                // Sort records by day in descending order (latest first)
-                val sortedRecords = records.sortedByDescending {
-                    it.date.split("-").getOrNull(1)?.toIntOrNull() ?: 0
-                }
+                Text(
+                    text = adviceText,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(16.dp),
+                    color = textColor,
+                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+        }
+    }
 
-                // Group records by type for organized display
-                val normalRecords = sortedRecords.filter {
-                    it.status == "0" || it.status == "1" ||
-                            it.status == "0+0" || it.status == "1+1" ||
-                            it.status == "0+1" || it.status == "1+0"
-                }
+    @Composable
+    fun MonthSection(
+        month: String,
+        records: List<AttendanceRecord>,
+        isExpanded: Boolean,
+        onToggle: () -> Unit
+    ) {
+        // Count classes by type for the header display
+        val presentCount =
+            records.count { it.status == "1" || it.status == "1+1" || it.status == "0+1" || it.status == "1+0" }
+        val absentCount = records.count { it.status == "0" || it.status == "0+0" }
 
-                val holidayRecords = sortedRecords.filter {
-                    it.status == "GH" || it.status == "H" || it.status == "CS" || it.status == "TL"
-                }
-
-                val specialRecords = sortedRecords.filter {
-                    it.status == "MS" || it.status == "CR" ||
-                            (!normalRecords.contains(it) && !holidayRecords.contains(it))
-                }
-
-                // Display normal classes first (present/absent)
-                if (normalRecords.isNotEmpty()) {
-                    normalRecords.forEach { record ->
-                        RecordRow(record)
-                    }
-                }
-
-                // Then display special cases like mid-sem exams
-                if (specialRecords.isNotEmpty()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Month header with ripple effect and class count
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggle),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 14.dp, horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "Special Sessions",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        text = month,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    specialRecords.forEach { record ->
-                        RecordRow(record)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${records.size} CLASSES",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        val rotation by animateFloatAsState(
+                            targetValue = if (isExpanded) 180f else 0f,
+                            label = "Arrow Rotation"
+                        )
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (isExpanded) "Collapse" else "Expand",
+                            modifier = Modifier
+                                .padding(start = 12.dp)
+                                .rotate(rotation),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
+            }
 
-                // Finally display holidays
-                if (holidayRecords.isNotEmpty()) {
-                    Text(
-                        text = "Holidays & Cancellations",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                    )
+            // Records
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically(
+                    expandFrom = Alignment.Top,
+                    animationSpec = tween(300)
+                ) + fadeIn(animationSpec = tween(300)),
+                exit = shrinkVertically(
+                    shrinkTowards = Alignment.Top,
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(300))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Sort records by day in descending order (latest first)
+                    val sortedRecords = records.sortedByDescending {
+                        it.date.split("-").getOrNull(1)?.toIntOrNull() ?: 0
+                    }
 
-                    holidayRecords.forEach { record ->
-                        RecordRow(record)
+                    // Group records by type for organized display
+                    val normalRecords = sortedRecords.filter {
+                        it.status == "0" || it.status == "1" ||
+                                it.status == "0+0" || it.status == "1+1" ||
+                                it.status == "0+1" || it.status == "1+0"
+                    }
+
+                    val holidayRecords = sortedRecords.filter {
+                        it.status == "GH" || it.status == "H" || it.status == "CS" || it.status == "TL"
+                    }
+
+                    val specialRecords = sortedRecords.filter {
+                        it.status == "MS" || it.status == "CR" ||
+                                (!normalRecords.contains(it) && !holidayRecords.contains(it))
+                    }
+
+                    // Display normal classes first (present/absent)
+                    if (normalRecords.isNotEmpty()) {
+                        normalRecords.forEach { record ->
+                            RecordRow(record)
+                        }
+                    }
+
+                    // Then display special cases like mid-sem exams
+                    if (specialRecords.isNotEmpty()) {
+                        Text(
+                            text = "Special Sessions",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+
+                        specialRecords.forEach { record ->
+                            RecordRow(record)
+                        }
+                    }
+
+                    // Finally display holidays
+                    if (holidayRecords.isNotEmpty()) {
+                        Text(
+                            text = "Holidays & Cancellations",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+
+                        holidayRecords.forEach { record ->
+                            RecordRow(record)
+                        }
                     }
                 }
             }
         }
     }
-}
+
 @Composable
 fun RecordRow(record: AttendanceRecord) {
     // Format the day better

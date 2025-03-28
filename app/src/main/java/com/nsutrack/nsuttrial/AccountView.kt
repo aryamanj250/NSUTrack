@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.nsutrack.nsuttrial.ui.util.clickable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -62,6 +63,7 @@ fun AccountView(
     }
 
     // Use Dialog to ensure full screen display
+    // Replace the Dialog and AnimatedVisibility section with this code
     Dialog(
         onDismissRequest = {
             coroutineScope.launch {
@@ -72,186 +74,265 @@ fun AccountView(
         },
         properties = DialogProperties(
             dismissOnBackPress = true,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false  // Make it full width
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
         )
     ) {
-        AnimatedVisibility(
-            visibleState = visible,
-            enter = slideInVertically(
-                initialOffsetY = { it },  // Start fully below the screen
-                animationSpec = tween(400, easing = EaseOutQuart)
-            ) + fadeIn(animationSpec = tween(350)),
-            exit = slideOutVertically(
-                targetOffsetY = { it },  // Exit to fully below the screen
-                animationSpec = tween(300, easing = EaseInQuart)
-            ) + fadeOut(animationSpec = tween(200))
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.BottomCenter
         ) {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = {
-                            Text(
-                                text = "Profile",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = {
-                                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                                coroutineScope.launch {
-                                    visible.targetState = false
-                                    delay(300)
-                                    onDismiss()
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            titleContentColor = MaterialTheme.colorScheme.onSurface
-                        )
-                    )
-                }
-            ) { paddingValues ->
-                Surface(
+            // Semi-transparent background
+            AnimatedVisibility(
+                visible = visible.targetState,
+                enter = fadeIn(animationSpec = tween(300)),
+                exit = fadeOut(animationSpec = tween(300))
+            ) {
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(paddingValues),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    when {
-                        isLoading -> {
-                            // Loading state
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(48.dp),
-                                    strokeWidth = 4.dp
-                                )
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .clickable {
+                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                            coroutineScope.launch {
+                                visible.targetState = false
+                                delay(300)
+                                onDismiss()
                             }
                         }
-                        errorMessage != null -> {
-                            // Error state
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(24.dp)
-                                ) {
+                )
+            }
+
+            // Card content with animation
+            AnimatedVisibility(
+                visibleState = visible,
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = tween(400, easing = EaseOutQuart)
+                ) + fadeIn(animationSpec = tween(350)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = tween(300, easing = EaseInQuart)
+                ) + fadeOut(animationSpec = tween(200))
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.8f)
+                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                    color = MaterialTheme.colorScheme.background,
+                    shadowElevation = 8.dp
+                ) {
+                    // Keep the Scaffold within the Surface
+                    Scaffold(
+                        topBar = {
+                            TopAppBar(
+                                title = {
                                     Text(
-                                        text = "Error loading profile data",
-                                        color = MaterialTheme.colorScheme.error,
+                                        text = "Profile",
                                         style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Medium
+                                        fontWeight = FontWeight.SemiBold
                                     )
-
-                                    Spacer(modifier = Modifier.height(12.dp))
-
-                                    Text(
-                                        text = errorMessage ?: "",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        textAlign = TextAlign.Center
-                                    )
-
-                                    Spacer(modifier = Modifier.height(24.dp))
-
-                                    Button(
-                                        onClick = {
-                                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                                            viewModel.fetchProfileData()
-                                        },
-                                        shape = RoundedCornerShape(24.dp)
+                                },
+                                navigationIcon = {
+                                    IconButton(onClick = {
+                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                        coroutineScope.launch {
+                                            visible.targetState = false
+                                            delay(300)
+                                            onDismiss()
+                                        }
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = "Back",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                },
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                                )
+                            )
+                        }
+                    ) { paddingValues ->
+                        // Rest of your content remains the same
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(paddingValues),
+                            color = MaterialTheme.colorScheme.background
+                        ) {
+                            when {
+                                isLoading -> {
+                                    // Loading state
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Text(
-                                            "Retry",
-                                            style = MaterialTheme.typography.labelLarge
+                                        CircularProgressIndicator(
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(48.dp),
+                                            strokeWidth = 4.dp
                                         )
                                     }
                                 }
-                            }
-                        }
-                        profileData != null -> {
-                            // Profile data with enhanced UI
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(
-                                    start = 20.dp,
-                                    end = 20.dp,
-                                    top = 8.dp,
-                                    bottom = 32.dp
-                                ),
-                                verticalArrangement = Arrangement.spacedBy(24.dp)
-                            ) {
-                                item {
-                                    ProfileHeader(profileData?.studentName ?: "", profileData?.studentID ?: "")
-                                }
 
-                                item {
-                                    ProfileSection(
-                                        title = "Personal Information",
-                                        icon = Icons.Filled.Person,
-                                        content = {
-                                            ProfileRow(label = "Name", value = profileData?.studentName ?: "")
-                                            ProfileRow(label = "Student ID", value = profileData?.studentID ?: "")
-                                            ProfileRow(label = "Date of birth", value = profileData?.dob ?: "")
-                                            ProfileRow(label = "Gender", value = profileData?.gender ?: "")
-                                            // Category removed as requested
-                                        }
-                                    )
-                                }
+                                errorMessage != null -> {
+                                    // Error state
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier.padding(24.dp)
+                                        ) {
+                                            Text(
+                                                text = "Error loading profile data",
+                                                color = MaterialTheme.colorScheme.error,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Medium
+                                            )
 
-                                item {
-                                    ProfileSection(
-                                        title = "Academic Information",
-                                        icon = Icons.Filled.School,
-                                        content = {
-                                            ProfileRow(label = "Degree", value = profileData?.degree ?: "")
-                                            ProfileRow(label = "Branch", value = profileData?.branchName ?: "")
+                                            Spacer(modifier = Modifier.height(12.dp))
 
-                                            // Only show specialization if different from branch
-                                            if (profileData?.specialization?.uppercase() != profileData?.branchName?.uppercase() &&
-                                                profileData?.specialization?.isNotBlank() == true) {
-                                                ProfileRow(label = "Specialization", value = profileData?.specialization ?: "")
-                                            }
+                                            Text(
+                                                text = errorMessage ?: "",
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                textAlign = TextAlign.Center
+                                            )
 
-                                            ProfileRow(label = "Section", value = profileData?.section ?: "")
+                                            Spacer(modifier = Modifier.height(24.dp))
 
-                                            if (profileData?.ftpt?.isNotBlank() == true) {
-                                                ProfileRow(label = "Mode", value = profileData?.ftpt ?: "")
-                                            }
-
-                                            if (profileData?.admission?.isNotBlank() == true) {
-                                                ProfileRow(label = "Admission", value = profileData?.admission ?: "")
+                                            Button(
+                                                onClick = {
+                                                    hapticFeedback.performHapticFeedback(
+                                                        HapticFeedback.FeedbackType.MEDIUM
+                                                    )
+                                                    viewModel.fetchProfileData()
+                                                },
+                                                shape = RoundedCornerShape(24.dp)
+                                            ) {
+                                                Text(
+                                                    "Retry",
+                                                    style = MaterialTheme.typography.labelLarge
+                                                )
                                             }
                                         }
-                                    )
+                                    }
                                 }
-                            }
-                        }
-                        else -> {
-                            // No data state
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "No profile data available",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
+
+                                profileData != null -> {
+                                    // Profile data with enhanced UI
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentPadding = PaddingValues(
+                                            start = 20.dp,
+                                            end = 20.dp,
+                                            top = 8.dp,
+                                            bottom = 32.dp
+                                        ),
+                                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                                    ) {
+                                        item {
+                                            ProfileHeader(
+                                                profileData?.studentName ?: "",
+                                                profileData?.studentID ?: ""
+                                            )
+                                        }
+
+                                        item {
+                                            ProfileSection(
+                                                title = "Personal Information",
+                                                icon = Icons.Filled.Person,
+                                                content = {
+                                                    ProfileRow(
+                                                        label = "Name",
+                                                        value = profileData?.studentName ?: ""
+                                                    )
+                                                    ProfileRow(
+                                                        label = "Student ID",
+                                                        value = profileData?.studentID ?: ""
+                                                    )
+                                                    ProfileRow(
+                                                        label = "Date of birth",
+                                                        value = profileData?.dob ?: ""
+                                                    )
+                                                    ProfileRow(
+                                                        label = "Gender",
+                                                        value = profileData?.gender ?: ""
+                                                    )
+                                                    // Category removed as requested
+                                                }
+                                            )
+                                        }
+
+                                        item {
+                                            ProfileSection(
+                                                title = "Academic Information",
+                                                icon = Icons.Filled.School,
+                                                content = {
+                                                    ProfileRow(
+                                                        label = "Degree",
+                                                        value = profileData?.degree ?: ""
+                                                    )
+                                                    ProfileRow(
+                                                        label = "Branch",
+                                                        value = profileData?.branchName ?: ""
+                                                    )
+
+                                                    // Only show specialization if different from branch
+                                                    if (profileData?.specialization?.uppercase() != profileData?.branchName?.uppercase() &&
+                                                        profileData?.specialization?.isNotBlank() == true
+                                                    ) {
+                                                        ProfileRow(
+                                                            label = "Specialization",
+                                                            value = profileData?.specialization
+                                                                ?: ""
+                                                        )
+                                                    }
+
+                                                    ProfileRow(
+                                                        label = "Section",
+                                                        value = profileData?.section ?: ""
+                                                    )
+
+                                                    if (profileData?.ftpt?.isNotBlank() == true) {
+                                                        ProfileRow(
+                                                            label = "Mode",
+                                                            value = profileData?.ftpt ?: ""
+                                                        )
+                                                    }
+
+                                                    if (profileData?.admission?.isNotBlank() == true) {
+                                                        ProfileRow(
+                                                            label = "Admission",
+                                                            value = profileData?.admission ?: ""
+                                                        )
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                else -> {
+                                    // No data state
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "No profile data available",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

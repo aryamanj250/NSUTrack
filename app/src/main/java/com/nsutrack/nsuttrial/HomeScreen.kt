@@ -37,6 +37,11 @@ import kotlinx.coroutines.launch
 import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import com.nsutrack.nsuttrial.ui.theme.getAttendanceAdvice
 import com.nsutrack.nsuttrial.ui.theme.getAttendanceStatusColor
@@ -110,50 +115,13 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.home),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+            EnhancedTopAppBar(
+                title = stringResource(R.string.home),
+                profileData = profileData,
+                onProfileClick = {
+                    showingAccountSheet = true
                 },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                            showingAccountSheet = true
-                        }) {
-                        // If we have profile data, show the first letter of the name as the avatar
-                        if (profileData != null) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = profileData?.studentName?.take(1)?.uppercase() ?: "A",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.AccountCircle,
-                                contentDescription = "Profile",
-                                modifier = Modifier.size(32.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground
-                )
+                hapticFeedback = hapticFeedback
             )
         }
     ) { paddingValues ->
@@ -680,6 +648,18 @@ fun HomeScheduleCard(
 ) {
     val textColor = getReadableTextColor(schedule.color)
 
+    // Add subtle pulsing animation for current class
+    val pulseAnimation = rememberInfiniteTransition(label = "PulseAnimation")
+    val pulseAlpha by pulseAnimation.animateFloat(
+        initialValue = if (isCurrentClass) 0.92f else 1f,
+        targetValue = if (isCurrentClass) 1f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "Pulse Alpha"
+    )
+
     // Add elevation for current class
     val elevation = if (isCurrentClass) 6.dp else 3.dp
 
@@ -687,96 +667,126 @@ fun HomeScheduleCard(
         modifier = Modifier
             .width((width * animationScale).dp)
             .height((75 * animationScale).dp)
+            .graphicsLayer {
+                alpha = pulseAlpha
+            }
             .shadow(
                 elevation = elevation,
-                shape = RoundedCornerShape(10.dp),
-                spotColor = schedule.color.copy(alpha = 0.5f)
+                shape = RoundedCornerShape(12.dp),
+                spotColor = schedule.color.copy(alpha = 0.7f)
             )
     ) {
         Card(
             modifier = Modifier
                 .fillMaxSize(),
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(
-                containerColor = schedule.color.copy(alpha = 0.9f)
+                containerColor = schedule.color.copy(alpha = 0.95f)
             )
         ) {
-            Column(
+            // Add subtle gradient overlay for depth
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalArrangement = Arrangement.SpaceBetween
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.1f),
+                                Color.Transparent
+                            ),
+                            start = Offset(0f, 0f),
+                            end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                        )
+                    )
             ) {
-                // Subject name
-                Text(
-                    text = schedule.subject,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = textColor.copy(alpha = 0.90f),
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
-                )
-
-                // Time range
-                Text(
-                    text = schedule.timeRange,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = textColor.copy(alpha = 0.90f),
-                    maxLines = 1
-                )
-
-                // Room and group info
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Room info
-                    if (schedule.room != null) {
-                        val roomText = if (schedule.room.contains(", ")) {
-                            val rooms = schedule.room.split(", ")
-                            if (rooms.size > 2) {
-                                "${rooms[0]}, ${rooms[1]}..."
+                    // Subject name
+                    Text(
+                        text = schedule.subject,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = textColor.copy(alpha = 0.95f),
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+
+                    // Time range
+                    Text(
+                        text = schedule.timeRange,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = textColor.copy(alpha = 0.95f),
+                        maxLines = 1
+                    )
+
+                    // Room and group info
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Room info
+                        if (schedule.room != null) {
+                            val roomText = if (schedule.room.contains(", ")) {
+                                val rooms = schedule.room.split(", ")
+                                if (rooms.size > 2) {
+                                    "${rooms[0]}, ${rooms[1]}..."
+                                } else {
+                                    schedule.room
+                                }
                             } else {
                                 schedule.room
                             }
-                        } else {
-                            schedule.room
+
+                            Text(
+                                text = roomText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = textColor.copy(alpha = 0.9f),
+                                maxLines = 1
+                            )
                         }
 
-                        Text(
-                            text = roomText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = textColor.copy(alpha = 0.9f),
-                            maxLines = 1
-                        )
-                    }
+                        // Separator
+                        if (schedule.room != null && schedule.getFormattedGroups() != null) {
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = textColor.copy(alpha = 0.7f)
+                            )
+                        }
 
-                    // Separator
-                    if (schedule.room != null && schedule.getFormattedGroups() != null) {
-                        Text(
-                            text = "•",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = textColor.copy(alpha = 0.7f)
-                        )
-                    }
-
-                    // Group info using the method
-                    schedule.getFormattedGroups()?.let { groups ->
-                        Text(
-                            text = groups,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = textColor.copy(alpha = 0.9f),
-                            maxLines = 1
-                        )
+                        // Group info using the method
+                        schedule.getFormattedGroups()?.let { groups ->
+                            Text(
+                                text = groups,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = textColor.copy(alpha = 0.9f),
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // Add a small indicator for current class
+        // Add a small indicator for current class with animation
         if (isCurrentClass) {
+            val indicatorScale by pulseAnimation.animateFloat(
+                initialValue = 1f,
+                targetValue = 1.2f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1000, easing = EaseInOutSine),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "Indicator Scale"
+            )
+
             Box(
                 modifier = Modifier
                     .size(8.dp)
+                    .scale(indicatorScale)
                     .align(Alignment.TopEnd)
                     .offset(x = (-6).dp, y = 6.dp)
                     .clip(CircleShape)
@@ -785,7 +795,6 @@ fun HomeScheduleCard(
         }
     }
 }
-
 @Composable
 fun AttendanceCard(
     subject: SubjectData,
@@ -794,6 +803,24 @@ fun AttendanceCard(
     modifier: Modifier = Modifier
 ) {
     var showDetailedView by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()  // Add this line
+
+    // Add hover animation
+    var isPressed by remember { mutableStateOf(false) }
+
+    val cardScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "Card Scale"
+    )
+
+    val cardElevation by animateFloatAsState(
+        targetValue = if (isPressed) 1f else 3f,
+        label = "Card Elevation"
+    )
 
     val (adviceText, _) = getAttendanceAdvice(
         subject.overallPresent,
@@ -810,13 +837,29 @@ fun AttendanceCard(
     }
 
     Column(modifier = modifier) {
-        // Main content - mimicking iOS style but with Android elements
+        // Main content with enhanced animation
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .scale(cardScale)
+                .shadow(
+                    elevation = cardElevation.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    spotColor = attendanceColor.copy(alpha = 0.1f)
+                )
+                .clip(RoundedCornerShape(12.dp))
                 .clickable {
+                    // Trigger pressed state briefly
+                    isPressed = true
                     hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                    showDetailedView = true
+
+                    // Reset after a short delay
+                    coroutineScope.launch {
+                        delay(100)
+                        isPressed = false
+                        delay(50)
+                        showDetailedView = true
+                    }
                 },
             color = MaterialTheme.colorScheme.surface
         ) {
@@ -853,7 +896,7 @@ fun AttendanceCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End
                     ) {
-                        // Percentage with colored text (no circle)
+                        // Percentage with colored text
                         Text(
                             text = "${subject.attendancePercentage.toInt()}%",
                             style = MaterialTheme.typography.titleMedium,
@@ -861,17 +904,24 @@ fun AttendanceCard(
                             color = attendanceColor
                         )
 
-                        // Arrow icon
+                        // Arrow icon with animation
+                        val arrowRotation by animateFloatAsState(
+                            targetValue = if (isPressed) 10f else 0f,
+                            label = "Arrow Rotation"
+                        )
+
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = "Details",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.padding(start = 8.dp)
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .rotate(arrowRotation)
                         )
                     }
                 }
 
-                // Divider at the bottom of each card, except the last one
+                // Divider at the bottom of each card
                 Divider(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -893,7 +943,6 @@ fun AttendanceCard(
         )
     }
 }
-
 // Helper function to generate consistent colors for subjects
 private fun generateConsistentColor(subjectCode: String): Color {
     // Simple hash function to get consistent colors
@@ -1038,6 +1087,121 @@ private fun calculateRedLinePosition(currentTime: Date): Float {
         elapsedHours * hourWidth + 16f // 16dp padding offset
     } else {
         -100f // Hide line if before academic day start
+    }
+}
+@Composable
+fun EnhancedTopAppBar(
+    title: String,
+    profileData: ProfileData?,
+    onProfileClick: () -> Unit,
+    hapticFeedback: HapticFeedback.HapticHandler
+) {
+    // Animation for title
+    var isLoaded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        delay(150)
+        isLoaded = true
+    }
+
+    val titleOffset by animateFloatAsState(
+        targetValue = if (isLoaded) 0f else -50f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "Title Animation"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp)
+    ) {
+        // Blurred background
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(radius = 3.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.95f),
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.9f)
+                        )
+                    )
+                )
+        )
+
+        // Content
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Title with animation
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.offset(x = titleOffset.dp)
+            )
+
+            // Profile button with animation
+            ProfileButton(
+                profileData = profileData,
+                onClick = {
+                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                    onProfileClick()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun ProfileButton(
+    profileData: ProfileData?,
+    onClick: () -> Unit
+) {
+    val scale by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "Profile Button Scale"
+    )
+
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.scale(scale)
+    ) {
+        if (profileData != null) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = profileData.studentName?.take(1)?.uppercase() ?: "A",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        } else {
+            Icon(
+                imageVector = Icons.Default.AccountCircle,
+                contentDescription = "Profile",
+                modifier = Modifier.size(32.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }
 
