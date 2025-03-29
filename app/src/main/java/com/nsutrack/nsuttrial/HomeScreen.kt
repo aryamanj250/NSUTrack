@@ -791,7 +791,7 @@ fun AttendanceCard(
     var showDetailedView by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()  // Add this line
 
-    // Add hover animation
+
     var isPressed by remember { mutableStateOf(false) }
 
     val cardScale by animateFloatAsState(
@@ -1049,15 +1049,13 @@ private fun calculateWidth(schedule: Schedule): Float {
 
     val durationInHours = schedule.duration / 3600f
 
-    // Scale width based on duration, with a minimum
     return max(minWidth, baseWidth * durationInHours)
 }
 
-// Calculate position for the current time red line
-private fun calculateRedLinePosition(currentTime: Date): Float {
-    val hourWidth = 160f // Same scale as card width
 
-    // Define start of day (9:00 AM for academic schedule)
+private fun calculateRedLinePosition(currentTime: Date): Float {
+    val hourWidth = 160f
+
     val startOfDay = Calendar.getInstance()
     startOfDay.time = currentTime
     startOfDay.set(Calendar.HOUR_OF_DAY, 9)
@@ -1065,14 +1063,13 @@ private fun calculateRedLinePosition(currentTime: Date): Float {
     startOfDay.set(Calendar.SECOND, 0)
     startOfDay.set(Calendar.MILLISECOND, 0)
 
-    // Calculate elapsed time since start of day in hours
     val elapsedMillis = currentTime.time - startOfDay.timeInMillis
     val elapsedHours = elapsedMillis / (1000 * 60 * 60f)
 
     return if (elapsedHours > 0) {
         elapsedHours * hourWidth + 16f // 16dp padding offset
     } else {
-        -100f // Hide line if before academic day start
+        -100f
     }
 }
 @Composable
@@ -1082,7 +1079,7 @@ fun EnhancedTopAppBar(
     onProfileClick: () -> Unit,
     hapticFeedback: HapticFeedback.HapticHandler
 ) {
-    // Animation for title
+
     var isLoaded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {

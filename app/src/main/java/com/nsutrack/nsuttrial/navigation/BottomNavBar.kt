@@ -32,74 +32,30 @@ fun BottomNavBar(navController: NavController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    // Create breathing animation
+    // Subtle breathing animation for indicator
     val breathingAnimation = rememberInfiniteTransition(label = "BreathingAnimation")
-    val breathScale by breathingAnimation.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.05f,
+    val indicatorAlpha by breathingAnimation.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3000, easing = EaseInOutCubic),
+            animation = tween(durationMillis = 2000, easing = EaseInOutSine),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "BreathingScale"
+        label = "IndicatorAlpha"
     )
 
-    // Animate background opacity
-    val bgOpacityAnimation by breathingAnimation.animateFloat(
-        initialValue = 0.88f,
-        targetValue = 0.92f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 5000, easing = EaseInOutCubic),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "BgOpacity"
-    )
-
-    // Enhanced floating bottom bar
-    Box(
+    // Surface for the bottom bar - clean solid look with subtle transparency
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(90.dp)
-            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 18.dp) // Increased bottom padding to lift it up
+            .height(100.dp)
+            .padding(horizontal = 10.dp, vertical = 1.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        tonalElevation = 2.dp,
+        shadowElevation = 4.dp
     ) {
-        // Blurred background effect with enhanced shadow for floating effect
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .shadow(
-                    elevation = 24.dp,
-                    shape = RoundedCornerShape(28.dp),
-                    spotColor = Color.Black.copy(alpha = 0.1f)
-                )
-                .clip(RoundedCornerShape(28.dp))
-                .blur(radius = 3.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surface.copy(alpha = bgOpacityAnimation - 0.03f),
-                            MaterialTheme.colorScheme.surface.copy(alpha = bgOpacityAnimation + 0.05f)
-                        )
-                    )
-                )
-        )
-
-        // Glass effect overlay
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(28.dp))
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.07f),
-                            Color.White.copy(alpha = 0.03f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-
-        // Actual navigation bar
+        // Navigation content
         Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -112,7 +68,7 @@ fun BottomNavBar(navController: NavController) {
 
                 // Enhanced animations for nav items
                 val animatedScale by animateFloatAsState(
-                    targetValue = if (selected) 1.15f else 1.0f,
+                    targetValue = if (selected) 1.1f else 1.0f,
                     animationSpec = spring(
                         dampingRatio = Spring.DampingRatioMediumBouncy,
                         stiffness = Spring.StiffnessMedium
@@ -120,7 +76,7 @@ fun BottomNavBar(navController: NavController) {
                     label = "NavItemScale"
                 )
 
-                // Colors based on selection state with more vibrant contrasts
+                // Colors based on selection state
                 val iconColor = if (selected) {
                     MaterialTheme.colorScheme.primary
                 } else {
@@ -133,20 +89,14 @@ fun BottomNavBar(navController: NavController) {
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 }
 
-                // Apply subtle breathing animation only to selected item
-                val itemScale = if (selected) animatedScale * breathScale else animatedScale
-
-                // NavItem with enhanced effects
+                // NavItem with clean visuals
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .scale(itemScale)
-                        .graphicsLayer {
-                            alpha = if (selected) 1f else 0.88f
-                        }
+                        .scale(animatedScale)
                         .clickable(enabled = !selected) {
                             if (!selected) {
                                 hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
@@ -161,39 +111,31 @@ fun BottomNavBar(navController: NavController) {
                         }
                         .padding(vertical = 8.dp, horizontal = 12.dp)
                 ) {
-                    // Icon with subtle glow for selected item
-                    Box(
-                        modifier = Modifier
-                            .size(if (selected) 30.dp else 26.dp)
-                            .graphicsLayer {
-                                if (selected) {
-                                    shadowElevation = 10f
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // Subtle background for selected icon
-                        if (selected) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                        shape = CircleShape
-                                    )
-                            )
-                        }
-
-                        Icon(
-                            imageVector = screen.icon,
-                            contentDescription = screen.title,
-                            tint = iconColor
+                    // Selected indicator dot (iOS style)
+                    if (selected) {
+                        Box(
+                            modifier = Modifier
+                                .size(4.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = indicatorAlpha))
+                                .align(Alignment.CenterHorizontally)
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
+                    } else {
+                        Spacer(modifier = Modifier.height(6.dp))
                     }
+
+                    // Icon
+                    Icon(
+                        imageVector = screen.icon,
+                        contentDescription = screen.title,
+                        tint = iconColor,
+                        modifier = Modifier.size(24.dp)
+                    )
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Always display text labels with improved style
+                    // Text label
                     Text(
                         text = screen.title,
                         color = textColor,
