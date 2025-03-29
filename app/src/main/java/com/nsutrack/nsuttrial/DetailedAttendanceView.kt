@@ -10,11 +10,11 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -197,10 +197,10 @@ fun DetailedAttendanceView(
 
                 // Sheet height with precise calculation based on screen size
                 val sheetHeightFraction by animateFloatAsState(
-                    targetValue = if (sheetState == EXPANDED) 0.93f else if (sheetState == HALF_EXPANDED) 0.8f else 0f,
+                    targetValue = if (sheetState == EXPANDED) 0.90f else if (sheetState == HALF_EXPANDED) 0.8f else 0f,
                     animationSpec = spring(
                         dampingRatio = 0.7f,
-                        stiffness = 400f,
+                        stiffness = 300f,
                         visibilityThreshold = 0.001f
                     ),
                     label = "SheetHeight"
@@ -216,7 +216,7 @@ fun DetailedAttendanceView(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(with(density) { sheetHeightPx.toDp() })
+                        .height(with(density) { (sheetHeightPx.coerceAtMost((screenHeight * 0.92f).toInt())).toDp() })
                         .offset { IntOffset(0, dragOffset.roundToInt()) }
                         .onSizeChanged {
                             // Store the screen height for precise calculations
@@ -328,7 +328,7 @@ fun DetailedAttendanceView(
                                             val baseResistance = 0.5f
 
                                             val stateResistance = when (sheetState) {
-                                                EXPANDED -> if (dragAmount > 0) 1.0f else 0.3f
+                                                EXPANDED -> if (dragAmount > 0) 1.0f else 0.0f  // Change 0.3f to 0.0f to prevent upward movement
                                                 HALF_EXPANDED -> if (dragAmount < 0) 0.9f else 0.8f
                                                 else -> 0f
                                             }
@@ -340,7 +340,7 @@ fun DetailedAttendanceView(
                                             val effectiveResistance = baseResistance * stateResistance * progressiveFactor
                                             dragOffset += dragAmount * effectiveResistance
 
-                                            dragOffset = dragOffset.coerceIn(-80f, 200f)
+                                            dragOffset = dragOffset.coerceIn(-50f, 150f)
                                         }
                                     )
                                 }
@@ -411,12 +411,12 @@ fun DetailedAttendanceView(
                             label = "DividerAlpha"
                         )
 
-                        Divider(
+                        HorizontalDivider(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = if (sheetState == EXPANDED) 0.dp else 12.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = dividerAlpha),
-                            thickness = 0.5.dp
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = dividerAlpha)
                         )
 
                         // Content area
