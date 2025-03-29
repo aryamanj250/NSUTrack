@@ -175,7 +175,6 @@ fun DetailedAttendanceView(
             // Card content with animation
             var isExpanded by remember { mutableStateOf(false) }
             var offsetY by remember { mutableStateOf(0f) }
-            var lastDragAmount by remember { mutableStateOf(0f) }
             val dragThreshold = 80f
 
             AnimatedVisibility(
@@ -255,7 +254,6 @@ fun DetailedAttendanceView(
                                         },
                                         onVerticalDrag = { change, dragAmount ->
                                             change.consume()
-                                            lastDragAmount = dragAmount
 
                                             // Calculate resistance based on expansion state and direction
                                             val resistanceFactor = when {

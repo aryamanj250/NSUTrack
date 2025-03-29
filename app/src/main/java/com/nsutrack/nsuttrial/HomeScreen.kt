@@ -327,7 +327,7 @@ fun HomeScheduleSection(
     // Force update time immediately upon composition
     var timeState by remember { mutableStateOf(Date()) }
 
-    // Update time every 30 seconds instead of every minute for more responsiveness
+    // Update time every 30 seconds
     LaunchedEffect(Unit) {
         while (true) {
             timeState = Date() // Use fresh date
@@ -335,40 +335,23 @@ fun HomeScheduleSection(
         }
     }
 
-    // Calculate today's day string - ensure we're getting fresh date info
+    // Calculate today's day string
     val calendar = Calendar.getInstance()
-    // Force reset to current time
     calendar.time = Date()
     val weekday = calendar.get(Calendar.DAY_OF_WEEK)
     val days = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
     val today = days[weekday - 1]
 
-    // Debug logging for day calculation
-    LaunchedEffect(Unit) {
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        Log.d("ScheduleSection", "Current Date/Time: ${dateFormat.format(Date())}")
-        Log.d("ScheduleSection", "Today calculated as: $today (day ${weekday})")
-    }
-
     // Process schedule data
     var todaySchedule by remember { mutableStateOf<List<Schedule>>(emptyList()) }
 
-    // Force a refresh of timetable data when component is shown
-    LaunchedEffect(Unit) {
-        if (!isTimetableLoading) {
-            Log.d("ScheduleSection", "Forcing timetable refresh")
-            viewModel.fetchTimetableData()
-        }
-    }
-
-    // Process schedule data with improved error handling
-    // Key on timeState to ensure we refresh when time updates
+    // Process schedule data whenever timetableData, today or timeState changes
     LaunchedEffect(timetableData, today, timeState) {
         withContext(Dispatchers.Default) {
             try {
                 val data = timetableData
                 if (data != null) {
-                    // Log full schedule data for debugging
+                    // Log available days
                     val availableDays = data.schedule.keys.joinToString(", ")
                     Log.d("ScheduleSection", "Available schedule days: $availableDays")
 
@@ -381,14 +364,11 @@ fun HomeScheduleSection(
                         // Process each class schedule
                         val schedules = todayClassSchedules.mapNotNull { classSchedule ->
                             try {
-                                // Log the raw class data
-                                Log.d("ScheduleSection", "Processing class: ${classSchedule.subject} at ${classSchedule.startTime}-${classSchedule.endTime}")
-
-                                // Parse class times with current date for accurate comparison
+                                // Parse class times
                                 val timePair = parseClassTimes(
                                     classSchedule.startTime,
                                     classSchedule.endTime,
-                                    Date() // Always use fresh date
+                                    Date()
                                 ) ?: return@mapNotNull null
 
                                 val (startTime, endTime) = timePair
@@ -422,7 +402,7 @@ fun HomeScheduleSection(
                             }
                         }
 
-                        // Now merge schedules that should be combined
+                        // Merge schedules that should be combined
                         todaySchedule = mergeSchedules(schedules).sortedBy { it.startTime }
                         Log.d("ScheduleSection", "Final schedule count: ${todaySchedule.size}")
                         return@withContext
@@ -433,7 +413,7 @@ fun HomeScheduleSection(
                     Log.d("ScheduleSection", "Timetable data is null")
                 }
 
-                // Fallback to sample schedule
+                // If we get here, we couldn't get the real schedule, so use the sample
                 todaySchedule = getSampleSchedule(Date())
             } catch (e: Exception) {
                 Log.e("ScheduleSection", "Error processing schedule data: ${e.message}")
@@ -585,8 +565,14 @@ fun HomeScheduleSection(
             }
         }
     }
-}
 
+    // Force fetch timetable data when this component is first displayed
+    LaunchedEffect(Unit) {
+        if (!isTimetableLoading) {
+            viewModel.fetchTimetableData(forceRefresh = true)
+        }
+    }
+}
 // Helper function to parse class times - updated to be more robust
 private fun parseClassTimes(startTimeStr: String, endTimeStr: String, baseDate: Date): Pair<Date, Date>? {
     try {
