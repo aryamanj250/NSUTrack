@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -11,7 +12,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.*
@@ -30,28 +30,14 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.nsutrack.nsuttrial.ui.util.clickable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.animation.animateContentSize
-import androidx.compose.ui.input.pointer.pointerInput
-
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.ui.draw.shadow
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
-
-// Define custom easing curves
-// Custom easing curve similar to Material Design's standard curve
-private val CustomEasing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
-private val EaseInQuart = CubicBezierEasing(0.5f, 0f, 0.75f, 0f)
-private val EaseOutQuart = CubicBezierEasing(0.25f, 1f, 0.5f, 1f)
-
+/**
+ * Optimized Profile View with faster animations and 90% max height
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountView(
@@ -64,203 +50,357 @@ fun AccountView(
     val hapticFeedback = HapticFeedback.getHapticFeedback()
     val coroutineScope = rememberCoroutineScope()
 
-    // Animation state for fullscreen entry/exit
+    // Animation state for fast entry/exit
     val visible = remember {
         MutableTransitionState(false).apply {
             targetState = true
         }
     }
 
-    // Handle back button press with animation
+    // Sheet states with clear naming
+    val EXPANDED = 0
+    val HALF_EXPANDED = 1
+    val HIDDEN = 2
+
+    // Handle back button press with faster animation
     BackHandler {
         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
         coroutineScope.launch {
             visible.targetState = false
-            delay(300)  // Wait for exit animation to complete
+            delay(200)  // Faster exit
             onDismiss()
         }
     }
 
-    // Use Dialog to ensure full screen display
-    // Replace the Dialog and AnimatedVisibility section with this code
+    // Fast animation curves
+    val emphasizedEasing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+    val standardEasing = FastOutSlowInEasing
+
+    // Dialog with optimized properties
     Dialog(
         onDismissRequest = {
             coroutineScope.launch {
                 visible.targetState = false
-                delay(300)
+                delay(200) // Faster exit
                 onDismiss()
             }
         },
         properties = DialogProperties(
             dismissOnBackPress = true,
-            dismissOnClickOutside = true,
+            dismissOnClickOutside = false,
             usePlatformDefaultWidth = false
         )
     ) {
+        // Track sheet state with fast transitions
+        var sheetState by remember { mutableStateOf(HALF_EXPANDED) }
+        var isDragging by remember { mutableStateOf(false) }
+        var dragOffset by remember { mutableStateOf(0f) }
+        var velocityTracker by remember { mutableStateOf(0f) }
+
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.BottomCenter
         ) {
-            // Semi-transparent background
-            AnimatedVisibility(
-                visible = visible.targetState,
-                enter = fadeIn(animationSpec = tween(400)),
-                exit = fadeOut(animationSpec = tween(300))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.5f))
-                        .clickable {
-                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+            // Fast scrim animation
+            val scrimAlpha by animateFloatAsState(
+                targetValue = when (sheetState) {
+                    EXPANDED -> 0.65f
+                    HALF_EXPANDED -> 0.5f
+                    else -> 0f
+                },
+                animationSpec = tween(
+                    durationMillis = 200, // Faster fade
+                    easing = standardEasing
+                ),
+                label = "ScrimAlpha"
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = scrimAlpha))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                        if (sheetState == EXPANDED) {
                             coroutineScope.launch {
+                                sheetState = HALF_EXPANDED
+                            }
+                        } else {
+                            coroutineScope.launch {
+                                sheetState = HIDDEN
+                                delay(100) // Faster transitions
                                 visible.targetState = false
-                                delay(300)
+                                delay(150)
                                 onDismiss()
                             }
                         }
-                )
-            }
+                    }
+            )
 
-            // Card content with animation
-            var isExpanded by remember { mutableStateOf(false) }
-            var offsetY by remember { mutableStateOf(0f) }
-            var lastDragAmount by remember { mutableStateOf(0f) }
-            val dragThreshold = 80f
-
+            // Fast sheet animation
             AnimatedVisibility(
-                visibleState = visible,
+                visible = visible.targetState,
                 enter = slideInVertically(
                     initialOffsetY = { it },
-                    animationSpec = tween(400)
-                ) + fadeIn(animationSpec = tween(350)),
+                    animationSpec = tween(
+                        durationMillis = 250, // Faster entry
+                        easing = emphasizedEasing
+                    )
+                ) + fadeIn(
+                    initialAlpha = 0f,
+                    animationSpec = tween(
+                        durationMillis = 200, // Faster fade in
+                        easing = standardEasing
+                    )
+                ),
                 exit = slideOutVertically(
                     targetOffsetY = { it },
-                    animationSpec = tween(300)
-                ) + fadeOut(animationSpec = tween(250))
+                    animationSpec = tween(
+                        durationMillis = 180, // Faster exit
+                        easing = standardEasing
+                    )
+                ) + fadeOut(
+                    targetAlpha = 0f,
+                    animationSpec = tween(
+                        durationMillis = 150 // Faster fade out
+                    )
+                )
             ) {
+                // MAX 90% height sheet
+                val sheetHeight by animateFloatAsState(
+                    targetValue = when (sheetState) {
+                        EXPANDED -> 0.9f
+                        HALF_EXPANDED -> 0.8f
+                        else -> 0f
+                    }.toFloat(), // Add explicit conversion to Float
+                    animationSpec = spring(
+                        dampingRatio = 0.7f,
+                        stiffness = 400f,
+                        visibilityThreshold = 0.001f
+                    ),
+                    label = "SheetHeight"
+                )
+
+                // Fast elevation animation
+                val sheetElevation by animateFloatAsState(
+                    targetValue = when (sheetState) {
+                        EXPANDED -> 8f
+                        HALF_EXPANDED -> 4f
+                        else -> 0f
+                    },
+                    animationSpec = tween(
+                        durationMillis = 150, // Faster animation
+                        easing = standardEasing
+                    ),
+                    label = "SheetElevation"
+                )
+
+                // Fast corner radius animation
+                val cornerRadius by animateFloatAsState(
+                    targetValue = when (sheetState) {
+                        EXPANDED -> 16f
+                        HALF_EXPANDED -> 28f
+                        else -> 28f
+                    },
+                    animationSpec = tween(
+                        durationMillis = 200, // Faster animation
+                        easing = standardEasing
+                    ),
+                    label = "CornerRadius"
+                )
+
+                // Sheet surface
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .animateContentSize(
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioLowBouncy,
-                                stiffness = Spring.StiffnessMediumLow
+                        .fillMaxHeight(sheetHeight)
+                        .offset { IntOffset(0, dragOffset.roundToInt()) }
+                        .graphicsLayer {
+                            this.shadowElevation = sheetElevation
+                            this.shape = RoundedCornerShape(
+                                topStart = cornerRadius.dp,
+                                topEnd = cornerRadius.dp
                             )
-                        )
-                        .fillMaxHeight(if (isExpanded) 1f else 0.85f)
-                        .offset { IntOffset(0, offsetY.roundToInt()) }
-                        .shadow(
-                            elevation = if (isExpanded) 16.dp else 8.dp,
-                            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-                        )
-                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+                            clip = true
+                        },
                     color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = if (isExpanded) 6.dp else 4.dp
+                    tonalElevation = 2.dp
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        // Header area (pill handle + title) - make this entire area draggable
+                        // Fast drag handle
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .pointerInput(Unit) {
                                     detectVerticalDragGestures(
+                                        onDragStart = {
+                                            isDragging = true
+                                        },
                                         onDragEnd = {
-                                            // Determine if we should expand or collapse
-                                            if (offsetY < -dragThreshold && !isExpanded) {
-                                                isExpanded = true
-                                                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                                            } else if (offsetY > dragThreshold && isExpanded) {
-                                                isExpanded = false
-                                                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                                            }
+                                            isDragging = false
 
-                                            // Animate back to position
+                                            // Fast snap behavior
                                             coroutineScope.launch {
-                                                animate(
-                                                    initialValue = offsetY,
-                                                    targetValue = 0f,
-                                                    animationSpec = spring(
-                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                        stiffness = Spring.StiffnessMedium
-                                                    )
-                                                ) { value, _ ->
-                                                    offsetY = value
+                                                val currentVelocity = velocityTracker
+                                                val velocityThreshold = 250f // Lower threshold for faster response
+                                                val offsetThreshold = 30f // Lower threshold for faster response
+
+                                                // Determine target state quickly
+                                                when {
+                                                    // Fast downward fling when expanded
+                                                    currentVelocity > velocityThreshold && sheetState == EXPANDED -> {
+                                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                                                        sheetState = HALF_EXPANDED
+                                                    }
+
+                                                    // Fast downward fling when half expanded (dismiss)
+                                                    currentVelocity > velocityThreshold * 1.5f && sheetState == HALF_EXPANDED -> {
+                                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                                        sheetState = HIDDEN
+                                                        delay(150) // Faster transitions
+                                                        visible.targetState = false
+                                                        delay(150)
+                                                        onDismiss()
+                                                    }
+
+                                                    // Fast upward fling when half expanded
+                                                    currentVelocity < -velocityThreshold && sheetState == HALF_EXPANDED -> {
+                                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                                                        sheetState = EXPANDED
+                                                    }
+
+                                                    // Quick position-based decisions
+                                                    dragOffset > offsetThreshold && sheetState == EXPANDED -> {
+                                                        sheetState = HALF_EXPANDED
+                                                    }
+                                                    dragOffset < -offsetThreshold && sheetState == HALF_EXPANDED -> {
+                                                        sheetState = EXPANDED
+                                                    }
+                                                    dragOffset > offsetThreshold * 2 && sheetState == HALF_EXPANDED -> {
+                                                        sheetState = HIDDEN
+                                                        delay(150) // Faster transitions
+                                                        visible.targetState = false
+                                                        delay(150)
+                                                        onDismiss()
+                                                    }
+
+                                                    // Fast return to current state
+                                                    else -> {
+                                                        val springSpec = spring<Float>(
+                                                            dampingRatio = 0.7f, // Less bouncy
+                                                            stiffness = 500f // Stiffer spring for faster movement
+                                                        )
+                                                        animate(
+                                                            initialValue = dragOffset,
+                                                            targetValue = 0f,
+                                                            animationSpec = springSpec
+                                                        ) { value, _ ->
+                                                            dragOffset = value
+                                                        }
+                                                    }
                                                 }
+
+                                                // Reset velocity tracker
+                                                velocityTracker = 0f
                                             }
                                         },
                                         onDragCancel = {
+                                            isDragging = false
                                             coroutineScope.launch {
+                                                // Fast animation to neutral
                                                 animate(
-                                                    initialValue = offsetY,
+                                                    initialValue = dragOffset,
                                                     targetValue = 0f,
                                                     animationSpec = spring(
-                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                        stiffness = Spring.StiffnessMedium
+                                                        dampingRatio = 0.7f,
+                                                        stiffness = 500f
                                                     )
                                                 ) { value, _ ->
-                                                    offsetY = value
+                                                    dragOffset = value
                                                 }
                                             }
                                         },
                                         onVerticalDrag = { change, dragAmount ->
                                             change.consume()
-                                            lastDragAmount = dragAmount
 
-                                            // Calculate resistance based on expansion state and direction
-                                            val resistanceFactor = when {
-                                                isExpanded && dragAmount > 0 -> 0.6f // Pulling down when expanded
-                                                !isExpanded && dragAmount < 0 -> 0.7f // Pulling up when collapsed
-                                                isExpanded && dragAmount < 0 -> 0.2f // Pulling up when already expanded
-                                                !isExpanded && dragAmount > 0 -> 0.2f // Pulling down when already collapsed
-                                                else -> 0.5f
+                                            // Quick resistance calculation
+                                            val baseResistance = 0.5f
+
+                                            // State-specific resistance
+                                            val stateResistance = when (sheetState) {
+                                                EXPANDED -> {
+                                                    if (dragAmount > 0) 1.0f else 0.3f // Allow down, resist up strongly
+                                                }
+                                                HALF_EXPANDED -> {
+                                                    if (dragAmount < 0) 0.9f else 0.8f // Balanced resistance
+                                                }
+                                                else -> 0f // No dragging when hidden
                                             }
 
-                                            offsetY += dragAmount * resistanceFactor
+                                            // Progressive resistance
+                                            val progressiveFactor = 1.0f - (abs(dragOffset) / 300f).coerceIn(0f, 0.5f)
 
-                                            // Apply limits to offset
-                                            offsetY = offsetY.coerceIn(-120f, 120f)
+                                            // Fast velocity tracking
+                                            velocityTracker = 0.75f * velocityTracker + 0.25f * dragAmount * 16f
+
+                                            // Apply resistance
+                                            val effectiveResistance = baseResistance * stateResistance * progressiveFactor
+                                            dragOffset += dragAmount * effectiveResistance
+
+                                            // Hard limits
+                                            dragOffset = dragOffset.coerceIn(-80f, 200f)
                                         }
                                     )
                                 }
                         ) {
                             Column(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                // Pill handle at the top
+                                // Fast handle animation
                                 Box(
-                                    modifier = Modifier
-                                        .padding(top = 12.dp, bottom = 8.dp),
+                                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    // Animated pill width
-                                    val pillWidth by animateFloatAsState(
-                                        targetValue = if (abs(offsetY) > 20f) 48f else 36f,
-                                        animationSpec = spring(
-                                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                                            stiffness = Spring.StiffnessLow
+                                    // Fast handle properties
+                                    val handleWidth by animateFloatAsState(
+                                        targetValue = if (isDragging) 48f else 36f,
+                                        animationSpec = tween(
+                                            durationMillis = 100, // Faster animation
+                                            easing = LinearOutSlowInEasing
                                         ),
-                                        label = "PillWidth"
+                                        label = "HandleWidth"
+                                    )
+
+                                    val handleOpacity by animateFloatAsState(
+                                        targetValue = if (isDragging) 0.8f else 0.4f,
+                                        animationSpec = tween(120), // Faster animation
+                                        label = "HandleOpacity"
                                     )
 
                                     Box(
                                         modifier = Modifier
-                                            .width(pillWidth.dp)
+                                            .width(handleWidth.dp)
                                             .height(4.dp)
                                             .clip(RoundedCornerShape(2.dp))
                                             .background(
                                                 MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                    alpha = if (isExpanded) 0.3f else 0.4f
+                                                    alpha = handleOpacity
                                                 )
                                             )
                                     )
                                 }
 
-                                // Profile title
-                                val titlePadding by animateFloatAsState(
-                                    targetValue = if (isExpanded) 12f else 16f,
-                                    label = "TitlePadding"
+                                // Title with fast animation
+                                val titleScale by animateFloatAsState(
+                                    targetValue = if (sheetState == EXPANDED) 1f else 0.98f,
+                                    animationSpec = tween(150), // Faster animation
+                                    label = "TitleScale"
                                 )
 
                                 Text(
@@ -270,40 +410,59 @@ fun AccountView(
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 48.dp, vertical = titlePadding.dp)
+                                        .padding(horizontal = 48.dp, vertical = 12.dp)
+                                        .graphicsLayer {
+                                            scaleX = titleScale
+                                            scaleY = titleScale
+                                        }
                                 )
                             }
                         }
 
-                        // Divider
+                        // Fast divider animation
+                        val dividerAlpha by animateFloatAsState(
+                            targetValue = if (isDragging) 0.7f else 0.25f,
+                            animationSpec = tween(100), // Faster animation
+                            label = "DividerAlpha"
+                        )
+
                         Divider(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = if (isExpanded) 0.dp else 12.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(
-                                alpha = if (isExpanded) 0.2f else 0.3f
-                            ),
+                                .padding(horizontal = if (sheetState == EXPANDED) 0.dp else 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = dividerAlpha),
                             thickness = 0.5.dp
                         )
 
-                        // Content area - normal scrolling here
+                        // Content area with fixed bottom padding
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(
-                                    bottom = if (isExpanded) 0.dp else 8.dp
-                                )
+                                .padding(bottom = 16.dp) // Consistent bottom padding
                         ) {
                             when {
                                 isLoading -> {
-                                    // Loading state
+                                    // Loading state with fast animation
                                     Box(
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
                                     ) {
+                                        val loadingAnimation = rememberInfiniteTransition(label = "LoadingAnimation")
+                                        val loadingScale by loadingAnimation.animateFloat(
+                                            initialValue = 1f,
+                                            targetValue = 1.1f,
+                                            animationSpec = infiniteRepeatable(
+                                                animation = tween(800), // Faster animation
+                                                repeatMode = RepeatMode.Reverse
+                                            ),
+                                            label = "LoadingScale"
+                                        )
+
                                         CircularProgressIndicator(
                                             color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(48.dp),
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .scale(loadingScale),
                                             strokeWidth = 4.dp
                                         )
                                     }
@@ -356,14 +515,14 @@ fun AccountView(
                                 }
 
                                 profileData != null -> {
-                                    // Profile data with enhanced UI
+                                    // Profile data with improved LazyColumn
                                     LazyColumn(
                                         modifier = Modifier.fillMaxSize(),
                                         contentPadding = PaddingValues(
                                             start = 20.dp,
                                             end = 20.dp,
                                             top = 8.dp,
-                                            bottom = 32.dp
+                                            bottom = 40.dp // Extra bottom padding to prevent empty space
                                         ),
                                         verticalArrangement = Arrangement.spacedBy(24.dp)
                                     ) {
@@ -448,7 +607,7 @@ fun AccountView(
                                 }
 
                                 else -> {
-                                    // No data state
+                                    // Empty state
                                     Box(
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
@@ -468,6 +627,7 @@ fun AccountView(
         }
     }
 }
+
 @Composable
 fun ProfileHeader(name: String, studentId: String) {
     Column(
@@ -476,26 +636,35 @@ fun ProfileHeader(name: String, studentId: String) {
             .padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Profile avatar with animated entry
+        // Profile avatar with fast enter animation
         var isLoaded by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) {
             delay(100)
             isLoaded = true
         }
 
-        val scale by animateFloatAsState(
+        val avatarScale by animateFloatAsState(
             targetValue = if (isLoaded) 1f else 0.8f,
             animationSpec = spring(
                 dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessLow
+                stiffness = Spring.StiffnessMedium // Higher stiffness for faster animation
             ),
-            label = "Avatar Scale"
+            label = "AvatarScale"
+        )
+
+        val avatarAlpha by animateFloatAsState(
+            targetValue = if (isLoaded) 1f else 0f,
+            animationSpec = tween(250), // Faster fade in
+            label = "AvatarAlpha"
         )
 
         Surface(
             modifier = Modifier
                 .size(110.dp)
-                .scale(scale),
+                .scale(avatarScale)
+                .graphicsLayer {
+                    alpha = avatarAlpha
+                },
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primaryContainer,
             tonalElevation = 4.dp
@@ -512,17 +681,29 @@ fun ProfileHeader(name: String, studentId: String) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = name,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
+        // Fast text animations
+        AnimatedVisibility(
+            visible = isLoaded,
+            enter = fadeIn(animationSpec = tween(300)) + // Faster fade in
+                    slideInVertically(
+                        initialOffsetY = { -20 },
+                        animationSpec = tween(300, easing = EaseOutQuad) // Faster entry
+                    )
+        ) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
 
         AnimatedVisibility(
             visible = isLoaded,
-            enter = fadeIn(animationSpec = tween(500)) +
-                    expandVertically(animationSpec = tween(500))
+            enter = fadeIn(animationSpec = tween(350, delayMillis = 80)) + // Faster fade with shorter delay
+                    expandVertically(
+                        animationSpec = tween(300, delayMillis = 80, easing = EaseOutQuad) // Faster expansion
+                    )
         ) {
             Text(
                 text = studentId,
@@ -546,7 +727,7 @@ fun ProfileSection(
             .animateContentSize(
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessLow
+                    stiffness = Spring.StiffnessMedium // Higher stiffness for faster animation
                 )
             )
     ) {
@@ -607,19 +788,19 @@ fun ProfileSection(
 
 @Composable
 fun ProfileRow(label: String, value: String) {
-    // Staggered animation for list items
+    // Fast staggered animation
     var isVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(100) // Small delay before starting animation
+        delay(80) // Shorter delay for faster appearance
         isVisible = true
     }
 
     AnimatedVisibility(
         visible = isVisible,
-        enter = fadeIn(animationSpec = tween(300)) +
+        enter = fadeIn(animationSpec = tween(250)) + // Faster fade in
                 slideInHorizontally(
                     initialOffsetX = { -20 },
-                    animationSpec = tween(300)
+                    animationSpec = tween(250, easing = EaseOutQuad) // Faster slide in
                 )
     ) {
         Column(
@@ -633,7 +814,7 @@ fun ProfileRow(label: String, value: String) {
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Label on the left side
+                // Label
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodyLarge,
@@ -641,7 +822,7 @@ fun ProfileRow(label: String, value: String) {
                     modifier = Modifier.weight(0.35f)
                 )
 
-                // Value on the right side with right alignment
+                // Value
                 Text(
                     text = formatProfileValue(label, value),
                     style = MaterialTheme.typography.bodyLarge,
@@ -668,7 +849,7 @@ fun ProfileRow(label: String, value: String) {
     }
 }
 
-// Format profile values appropriately - keeping existing functionality
+// Format profile values appropriately
 fun formatProfileValue(label: String, value: String): String {
     return when (label) {
         "Student ID" -> value  // Keep student ID as is
@@ -693,7 +874,7 @@ fun formatProfileValue(label: String, value: String): String {
     }
 }
 
-// Extension functions for string capitalization - keeping existing functionality
+// Extension functions for string capitalization
 fun String.capitalize(): String {
     return this.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 }
