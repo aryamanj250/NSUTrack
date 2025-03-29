@@ -20,7 +20,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -40,7 +39,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Optimized Profile View with fixed bottom spacing
+ * Google-styled Profile View with simplified animations
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,8 +79,7 @@ fun AccountView(
         }
     }
 
-    // Animation curves
-    val emphasizedEasing = CubicBezierEasing(0.1f, 0.7f, 0.1f, 1.0f)
+    // Google-style animation curves (more subtle)
     val standardEasing = FastOutSlowInEasing
 
     // Dialog
@@ -109,9 +107,9 @@ fun AccountView(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.BottomCenter
         ) {
-            // Scrim animation
+            // Scrim animation - Google uses a more subtle scrim
             val scrimAlpha by animateFloatAsState(
-                targetValue = if (sheetState == EXPANDED) 0.65f else if (sheetState == HALF_EXPANDED) 0.5f else 0f,
+                targetValue = if (sheetState == EXPANDED) 0.6f else if (sheetState == HALF_EXPANDED) 0.4f else 0f,
                 animationSpec = tween(200, easing = standardEasing),
                 label = "ScrimAlpha"
             )
@@ -141,26 +139,26 @@ fun AccountView(
                     }
             )
 
-            // Main sheet
+            // Main sheet with Google-style animation (faster, cleaner)
             AnimatedVisibility(
                 visible = visible.targetState,
                 enter = slideInVertically(
                     initialOffsetY = { it },
-                    animationSpec = tween(250, easing = emphasizedEasing)
-                ) + fadeIn(tween(200)),
+                    animationSpec = tween(220, easing = standardEasing)
+                ) + fadeIn(tween(180)),
                 exit = slideOutVertically(
                     targetOffsetY = { it },
-                    animationSpec = tween(180, easing = standardEasing)
-                ) + fadeOut(tween(150))
+                    animationSpec = tween(150, easing = standardEasing)
+                ) + fadeOut(tween(120))
             ) {
                 // Get exact screen height
                 var screenHeight by remember { mutableStateOf(0) }
 
-                // Sheet height with precise calculation
+                // Sheet height with precise calculation - Google uses standard fractions
                 val sheetHeightFraction by animateFloatAsState(
-                    targetValue = if (sheetState == EXPANDED) 0.90f else if (sheetState == HALF_EXPANDED) 0.8f else 0f,
+                    targetValue = if (sheetState == EXPANDED) 0.90f else if (sheetState == HALF_EXPANDED) 0.75f else 0f,
                     animationSpec = spring(
-                        dampingRatio = 0.7f,
+                        dampingRatio = 0.8f, // Less bouncy, more Google-like
                         stiffness = 400f,
                         visibilityThreshold = 0.001f
                     ),
@@ -186,10 +184,9 @@ fun AccountView(
                             }
                         }
                         .graphicsLayer {
-                            this.shadowElevation = if (sheetState == EXPANDED) 8f else 4f
+                            this.shadowElevation = 4f // Google uses consistent elevation
                             this.shape = RoundedCornerShape(
-                                topStart = if (sheetState == EXPANDED) 16.dp else 28.dp,
-                                topEnd = if (sheetState == EXPANDED) 16.dp else 28.dp
+                                topStart = 16.dp, topEnd = 16.dp // Google uses consistent corner radius
                             )
                             clip = true
                         },
@@ -197,7 +194,7 @@ fun AccountView(
                     tonalElevation = 2.dp
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        // Draggable header
+                        // Draggable header in Google style - simpler
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -254,7 +251,7 @@ fun AccountView(
 
                                                     else -> {
                                                         val springSpec = spring<Float>(
-                                                            dampingRatio = 0.7f,
+                                                            dampingRatio = 0.8f, // Less bouncy
                                                             stiffness = 500f
                                                         )
                                                         animate(
@@ -277,7 +274,7 @@ fun AccountView(
                                                     initialValue = dragOffset,
                                                     targetValue = 0f,
                                                     animationSpec = spring(
-                                                        dampingRatio = 0.7f,
+                                                        dampingRatio = 0.8f,
                                                         stiffness = 500f
                                                     )
                                                 ) { value, _ ->
@@ -291,7 +288,7 @@ fun AccountView(
                                             val baseResistance = 0.5f
 
                                             val stateResistance = when (sheetState) {
-                                                EXPANDED -> if (dragAmount > 0) 1.0f else 0.0f  // Change 0.3f to 0.0f to prevent upward movement
+                                                EXPANDED -> if (dragAmount > 0) 1.0f else 0.0f
                                                 HALF_EXPANDED -> if (dragAmount < 0) 0.9f else 0.8f
                                                 else -> 0f
                                             }
@@ -314,72 +311,44 @@ fun AccountView(
                                     .padding(bottom = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                // Handle
+                                // Handle - Google style (thinner, less animated)
                                 Box(
-                                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                                    modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    val handleWidth by animateFloatAsState(
-                                        targetValue = if (isDragging) 48f else 36f,
-                                        animationSpec = tween(100),
-                                        label = "HandleWidth"
-                                    )
-
-                                    val handleOpacity by animateFloatAsState(
-                                        targetValue = if (isDragging) 0.8f else 0.4f,
-                                        animationSpec = tween(120),
-                                        label = "HandleOpacity"
-                                    )
-
                                     Box(
                                         modifier = Modifier
-                                            .width(handleWidth.dp)
+                                            .width(36.dp)
                                             .height(4.dp)
                                             .clip(RoundedCornerShape(2.dp))
                                             .background(
                                                 MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                    alpha = handleOpacity
+                                                    alpha = 0.4f
                                                 )
                                             )
                                     )
                                 }
 
-                                // Title
-                                val titleScale by animateFloatAsState(
-                                    targetValue = if (sheetState == EXPANDED) 1f else 0.98f,
-                                    animationSpec = tween(150),
-                                    label = "TitleScale"
-                                )
-
+                                // Title - Google style (simpler)
                                 Text(
                                     text = "Profile",
                                     style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.SemiBold,
+                                    fontWeight = FontWeight.Medium, // Google uses medium weight
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 48.dp, vertical = 12.dp)
-                                        .graphicsLayer {
-                                            scaleX = titleScale
-                                            scaleY = titleScale
-                                        }
                                 )
                             }
                         }
 
-                        // Divider
-                        val dividerAlpha by animateFloatAsState(
-                            targetValue = if (isDragging) 0.7f else 0.25f,
-                            animationSpec = tween(100),
-                            label = "DividerAlpha"
-                        )
-
+                        // Divider - Google style (thinner)
                         HorizontalDivider(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = if (sheetState == EXPANDED) 0.dp else 12.dp),
+                                .padding(horizontal = 0.dp),
                             thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = dividerAlpha)
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                         )
 
                         // Content area
@@ -390,34 +359,21 @@ fun AccountView(
                         ) {
                             when {
                                 isLoading -> {
-                                    // Loading state
+                                    // Loading state - Google style
                                     Box(
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        val loadingAnimation = rememberInfiniteTransition(label = "LoadingAnimation")
-                                        val loadingScale by loadingAnimation.animateFloat(
-                                            initialValue = 1f,
-                                            targetValue = 1.1f,
-                                            animationSpec = infiniteRepeatable(
-                                                animation = tween(800),
-                                                repeatMode = RepeatMode.Reverse
-                                            ),
-                                            label = "LoadingScale"
-                                        )
-
                                         CircularProgressIndicator(
                                             color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier
-                                                .size(48.dp)
-                                                .scale(loadingScale),
-                                            strokeWidth = 4.dp
+                                            modifier = Modifier.size(40.dp),
+                                            strokeWidth = 3.dp
                                         )
                                     }
                                 }
 
                                 errorMessage != null -> {
-                                    // Error state
+                                    // Error state - Google style
                                     Box(
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
@@ -429,7 +385,7 @@ fun AccountView(
                                             Text(
                                                 text = "Error loading profile data",
                                                 color = MaterialTheme.colorScheme.error,
-                                                style = MaterialTheme.typography.titleLarge,
+                                                style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Medium
                                             )
 
@@ -438,12 +394,13 @@ fun AccountView(
                                             Text(
                                                 text = errorMessage ?: "",
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                style = MaterialTheme.typography.bodyLarge,
+                                                style = MaterialTheme.typography.bodyMedium,
                                                 textAlign = TextAlign.Center
                                             )
 
                                             Spacer(modifier = Modifier.height(24.dp))
 
+                                            // Google-style button
                                             Button(
                                                 onClick = {
                                                     hapticFeedback.performHapticFeedback(
@@ -451,7 +408,7 @@ fun AccountView(
                                                     )
                                                     viewModel.fetchProfileData()
                                                 },
-                                                shape = RoundedCornerShape(24.dp)
+                                                shape = RoundedCornerShape(8.dp) // Google uses less rounded corners
                                             ) {
                                                 Text(
                                                     "Retry",
@@ -463,17 +420,16 @@ fun AccountView(
                                 }
 
                                 profileData != null -> {
-                                    // Profile data
+                                    // Profile data - Google style layout
                                     LazyColumn(
                                         modifier = Modifier.fillMaxSize(),
                                         contentPadding = PaddingValues(
-                                            start = 20.dp,
-                                            end = 20.dp,
+                                            start = 16.dp,
+                                            end = 16.dp,
                                             top = 8.dp,
-                                            // Critical: Extra bottom padding to ensure content fills past bottom nav
-                                            bottom = 120.dp
+                                            bottom = 100.dp
                                         ),
-                                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                                        verticalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
                                         item {
                                             ProfileHeader(
@@ -552,16 +508,11 @@ fun AccountView(
                                                 }
                                             )
                                         }
-
-                                        // Extra spacer
-                                        item {
-                                            Spacer(modifier = Modifier.height(80.dp))
-                                        }
                                     }
                                 }
 
                                 else -> {
-                                    // Empty state
+                                    // Empty state - Google style
                                     Box(
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
@@ -590,7 +541,7 @@ fun ProfileHeader(name: String, studentId: String) {
             .padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Avatar animation
+        // Avatar in Google style - simpler animation
         var isLoaded by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) {
             delay(100)
@@ -598,7 +549,7 @@ fun ProfileHeader(name: String, studentId: String) {
         }
 
         val avatarScale by animateFloatAsState(
-            targetValue = if (isLoaded) 1f else 0.8f,
+            targetValue = if (isLoaded) 1f else 0.9f, // Less dramatic scale
             animationSpec = spring(
                 dampingRatio = Spring.DampingRatioMediumBouncy,
                 stiffness = Spring.StiffnessMedium
@@ -608,26 +559,27 @@ fun ProfileHeader(name: String, studentId: String) {
 
         val avatarAlpha by animateFloatAsState(
             targetValue = if (isLoaded) 1f else 0f,
-            animationSpec = tween(250),
+            animationSpec = tween(200), // Faster fade in
             label = "AvatarAlpha"
         )
 
         Surface(
             modifier = Modifier
-                .size(110.dp)
-                .scale(avatarScale)
+                .size(100.dp) // Google uses slightly smaller avatars
                 .graphicsLayer {
+                    scaleX = avatarScale
+                    scaleY = avatarScale
                     alpha = avatarAlpha
                 },
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primaryContainer,
-            tonalElevation = 4.dp
+            shadowElevation = 0.dp // Google uses less shadows
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
                     text = name.take(1).uppercase(),
                     style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Medium, // Google uses medium weight
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
@@ -635,28 +587,28 @@ fun ProfileHeader(name: String, studentId: String) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Fast text animations
+        // Text animations - Google style (faster, simpler)
         AnimatedVisibility(
             visible = isLoaded,
-            enter = fadeIn(animationSpec = tween(300)) +
+            enter = fadeIn(animationSpec = tween(200)) +
                     slideInVertically(
-                        initialOffsetY = { -20 },
-                        animationSpec = tween(300, easing = EaseOutQuad)
+                        initialOffsetY = { -10 }, // Less dramatic slide
+                        animationSpec = tween(250, easing = EaseOutQuad)
                     )
         ) {
             Text(
                 text = name,
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium, // Google uses medium weight
                 color = MaterialTheme.colorScheme.onBackground
             )
         }
 
         AnimatedVisibility(
             visible = isLoaded,
-            enter = fadeIn(animationSpec = tween(350, delayMillis = 80)) +
+            enter = fadeIn(animationSpec = tween(250, delayMillis = 50)) +
                     expandVertically(
-                        animationSpec = tween(300, delayMillis = 80, easing = EaseOutQuad)
+                        animationSpec = tween(250, delayMillis = 50, easing = EaseOutQuad)
                     )
         ) {
             Text(
@@ -680,12 +632,12 @@ fun ProfileSection(
             .fillMaxWidth()
             .animateContentSize(
                 animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    dampingRatio = 0.8f, // Less bouncy
                     stiffness = Spring.StiffnessMedium
                 )
             )
     ) {
-        // Section header
+        // Section header - Google style
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -693,7 +645,7 @@ fun ProfileSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(36.dp), // Smaller icon container
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -702,7 +654,7 @@ fun ProfileSection(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp) // Smaller icon
                     )
                 }
             }
@@ -712,20 +664,20 @@ fun ProfileSection(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium, // Google uses medium weight
                 color = MaterialTheme.colorScheme.onBackground
             )
         }
 
-        // Section content
+        // Section content - Google style cards (less rounded, less elevation)
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(8.dp), // Google uses less rounded corners
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
             ),
             elevation = CardDefaults.cardElevation(
-                defaultElevation = 2.dp
+                defaultElevation = 1.dp // Google uses less elevation
             )
         ) {
             Column(
@@ -742,19 +694,19 @@ fun ProfileSection(
 
 @Composable
 fun ProfileRow(label: String, value: String) {
-    // Fast staggered animation
+    // Google-style staggered animation (faster, less dramatic)
     var isVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(80) // Shorter delay for faster appearance
+        delay(50) // Shorter delay for faster appearance
         isVisible = true
     }
 
     AnimatedVisibility(
         visible = isVisible,
-        enter = fadeIn(animationSpec = tween(250)) +
+        enter = fadeIn(animationSpec = tween(200)) +
                 slideInHorizontally(
-                    initialOffsetX = { -20 },
-                    animationSpec = tween(250, easing = EaseOutQuad)
+                    initialOffsetX = { -10 }, // Less dramatic slide
+                    animationSpec = tween(200, easing = EaseOutQuad)
                 )
     ) {
         Column(
@@ -768,7 +720,7 @@ fun ProfileRow(label: String, value: String) {
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Label
+                // Label - Google style
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodyLarge,
@@ -776,11 +728,11 @@ fun ProfileRow(label: String, value: String) {
                     modifier = Modifier.weight(0.35f)
                 )
 
-                // Value
+                // Value - Google style
                 Text(
                     text = formatProfileValue(label, value),
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.Normal, // Google uses normal weight
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier
                         .weight(0.65f)
@@ -788,15 +740,15 @@ fun ProfileRow(label: String, value: String) {
                 )
             }
 
-            // Add divider if not the last element
+            // Add divider if not the last element (thinner divider for Google style)
             if (label != "Section" && label != "Admission" && label != "Mode" &&
                 label != "Gender" && label != "Category" && label != "Specialization") {
                 HorizontalDivider(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 0.dp, end = 0.dp),
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    thickness = (1.5).dp, // Google uses thicker divider0.5dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                 )
             }
         }

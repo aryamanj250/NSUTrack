@@ -2,39 +2,44 @@ package com.nsutrack.nsuttrial.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Default accent colors (fallback when dynamic colors aren't available)
-val Primary = Color(0xFF0061A4) // Deep blue as the primary brand color
-val Secondary = Color(0xFF4B57A9) // Indigo-like secondary
-val Tertiary = Color(0xFF006875) // Teal-like tertiary
+// Google's primary blue color
+val GoogleBlue = Color(0xFF1a73e8)
+val GoogleBlueLight = Color(0xFF4285F4)
+val GoogleBlueDark = Color(0xFF0d47a1)
 
-// Light theme colors
-val PrimaryLight = Primary
-val SecondaryLight = Secondary
-val TertiaryLight = Tertiary
-val BackgroundLight = Color(0xFFF8FDFF)
-val SurfaceLight = Color(0xFFFBFCFF)
+// Other Google brand colors
+val GoogleRed = Color(0xFFea4335)
+val GoogleYellow = Color(0xFFfbbc04)
+val GoogleGreen = Color(0xFF34a853)
+
+// Light theme colors - following Google's Material Theme guidelines
+val PrimaryLight = GoogleBlue
+val SecondaryLight = Color(0xFF673AB7) // Google purple-ish
+val TertiaryLight = GoogleGreen
+val BackgroundLight = Color(0xFFFAFAFA) // Google uses very light gray background
+val SurfaceLight = Color.White
 val OnPrimaryLight = Color.White
 val OnSecondaryLight = Color.White
 val OnTertiaryLight = Color.White
-val OnBackgroundLight = Color(0xFF001F2A)
-val OnSurfaceLight = Color(0xFF001F2A)
+val OnBackgroundLight = Color(0xFF202124) // Google's dark gray for text
+val OnSurfaceLight = Color(0xFF202124)
 
-// Dark theme colors
-val PrimaryDark = Color(0xFF88CCFF)
-val SecondaryDark = Color(0xFFBBC3FF)
-val TertiaryDark = Color(0xFF86D2E1)
-val BackgroundDark = Color(0xFF001F2A)
-val SurfaceDark = Color(0xFF001F2A)
-val OnPrimaryDark = Color(0xFF003258)
-val OnSecondaryDark = Color(0xFF202F6E)
-val OnTertiaryDark = Color(0xFF004E5A)
-val OnBackgroundDark = Color(0xFFBFE9FF)
-val OnSurfaceDark = Color(0xFFBFE9FF)
+// Dark theme colors - Google's dark theme colors
+val PrimaryDark = Color(0xFF8AB4F8) // Lighter blue for dark theme
+val SecondaryDark = Color(0xFFD0BCFF) // Light purple for dark theme
+val TertiaryDark = Color(0xFFA8DAB5) // Light green for dark theme
+val BackgroundDark = Color(0xFF202124) // Google's dark gray
+val SurfaceDark = Color(0xFF292A2D) // Slightly lighter than background
+val OnPrimaryDark = Color(0xFF002C5C)
+val OnSecondaryDark = Color(0xFF381E72)
+val OnTertiaryDark = Color(0xFF0F3921)
+val OnBackgroundDark = Color(0xFFE1E3E3) // Google uses off-white text
+val OnSurfaceDark = Color(0xFFE1E3E3)
 
-// Status colors - these can be used across both themes
-val Error = Color(0xFFBA1A1A)
-val ErrorDark = Color(0xFFFFB4AB)
-val Success = Color(0xFF146C2E)
-val SuccessDark = Color(0xFF8BDB9E)
-val Warning = Color(0xFFB7612D)
-val WarningDark = Color(0xFFFFB694)
+// Status colors
+val Error = GoogleRed
+val ErrorDark = Color(0xFFF48FB1)
+val Success = GoogleGreen
+val SuccessDark = Color(0xFF81C784)
+val Warning = GoogleYellow
+val WarningDark = Color(0xFFFFE082)

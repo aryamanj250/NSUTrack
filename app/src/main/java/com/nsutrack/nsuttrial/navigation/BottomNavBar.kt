@@ -3,21 +3,15 @@ package com.nsutrack.nsuttrial.navigation
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -32,71 +26,45 @@ fun BottomNavBar(navController: NavController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    // Subtle breathing animation for indicator
-    val breathingAnimation = rememberInfiniteTransition(label = "BreathingAnimation")
-    val indicatorAlpha by breathingAnimation.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2000, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "IndicatorAlpha"
-    )
-
-    // Surface for the bottom bar - clean solid look with subtle transparency
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(100.dp)
-            .padding(horizontal = 10.dp, vertical = 1.dp),
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-        tonalElevation = 2.dp,
-        shadowElevation = 4.dp
+            .height(85.dp)
+            .shadow(
+                elevation = 10.dp,
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+            ),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 10.dp
     ) {
-        // Navigation content
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 5.dp, vertical = 0.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Top
         ) {
             screens.forEach { screen ->
                 val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
 
-                // Enhanced animations for nav items
-                val animatedScale by animateFloatAsState(
-                    targetValue = if (selected) 1.1f else 1.0f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    ),
-                    label = "NavItemScale"
+                val animatedWeight by animateFloatAsState(
+                    targetValue = if (selected) 1.1f else 1f,
+                    animationSpec = tween(durationMillis = 200),
+                    label = "NavItemWeight"
                 )
 
-                // Colors based on selection state
                 val iconColor = if (selected) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                 }
 
-                val textColor = if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                }
-
-                // NavItem with clean visuals
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
+                    verticalArrangement = Arrangement.Top,
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(animatedWeight)
                         .fillMaxHeight()
-                        .scale(animatedScale)
                         .clickable(enabled = !selected) {
                             if (!selected) {
                                 hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
@@ -109,39 +77,38 @@ fun BottomNavBar(navController: NavController) {
                                 }
                             }
                         }
-                        .padding(vertical = 8.dp, horizontal = 12.dp)
+                        // Reduced the top padding to move content up further
+                        .padding(top = 2.dp)
                 ) {
-                    // Selected indicator dot (iOS style)
+                    // Selected indicator - positioned higher
                     if (selected) {
                         Box(
                             modifier = Modifier
-                                .size(4.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = indicatorAlpha))
+                                .width(32.dp)
+                                .height(3.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(MaterialTheme.colorScheme.primary)
                                 .align(Alignment.CenterHorizontally)
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
                     } else {
                         Spacer(modifier = Modifier.height(6.dp))
                     }
 
-                    // Icon
                     Icon(
                         imageVector = screen.icon,
                         contentDescription = screen.title,
                         tint = iconColor,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(26.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
-                    // Text label
                     Text(
                         text = screen.title,
-                        color = textColor,
+                        color = iconColor,
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        textAlign = TextAlign.Center
+                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
                     )
                 }
             }

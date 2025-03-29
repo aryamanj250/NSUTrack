@@ -91,6 +91,7 @@ fun NSUTrackTheme(
     viewModel: AttendanceViewModel? = null,
     content: @Composable () -> Unit
 ) {
+
     // Use the useDynamicColors preference from ViewModel if available
     val useDynamicColors by viewModel?.useDynamicColors?.collectAsState() ?: run {
         androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
@@ -111,17 +112,29 @@ fun NSUTrackTheme(
         SideEffect {
             val window = (view.context as Activity).window
 
-            // Set status bar color with improved contrast
-            window.statusBarColor = colorScheme.background.toArgb()
+            // Tell the system that our app will handle edge-to-edge
+            WindowCompat.setDecorFitsSystemWindows(window, false)
 
-            // Set the status bar icons to appropriate contrast
+            // Set status bar color to transparent or background color
+            window.statusBarColor = Color.Transparent.toArgb()
+
+            // Set navigation bar color to match your app's bottom navigation bar
+            // Using surface color to match bottom navigation bar
+            window.navigationBarColor = colorScheme.surface.toArgb()
+
+            // If you want a small tonal difference between system nav and app nav,
+            // you can use surfaceVariant instead
+            // window.navigationBarColor = colorScheme.surfaceVariant.toArgb()
+
+            // Control navigation bar icon/button colors based on theme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
 
-            // Set navigation bar color to match theme
-            window.navigationBarColor = colorScheme.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
+            // Remove the navigation bar divider on Android 10+
+            window.isNavigationBarContrastEnforced = false
         }
     }
+
 
     MaterialTheme(
         colorScheme = colorScheme,
