@@ -6,6 +6,8 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,9 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -32,10 +37,23 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.animation.animateContentSize
+import androidx.compose.ui.input.pointer.pointerInput
+
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.ui.draw.shadow
+
 
 // Custom easing curves for smoother animations
 private val EaseInQuart = CubicBezierEasing(0.5f, 0f, 0.75f, 0f)
 private val EaseOutQuart = CubicBezierEasing(0.25f, 1f, 0.5f, 1f)
+// Custom easing curve similar to Material Design's standard curve
+private val CustomEasing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,13 +154,13 @@ fun DetailedAttendanceView(
             // Semi-transparent background
             AnimatedVisibility(
                 visible = visible.targetState,
-                enter = fadeIn(animationSpec = tween(300)),
+                enter = fadeIn(animationSpec = tween(400)),
                 exit = fadeOut(animationSpec = tween(300))
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.4f))
+                        .background(Color.Black.copy(alpha = 0.5f))
                         .clickable {
                             hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
                             coroutineScope.launch {
@@ -155,80 +173,177 @@ fun DetailedAttendanceView(
             }
 
             // Card content with animation
+            var isExpanded by remember { mutableStateOf(false) }
+            var offsetY by remember { mutableStateOf(0f) }
+            var lastDragAmount by remember { mutableStateOf(0f) }
+            val dragThreshold = 80f
+
             AnimatedVisibility(
                 visibleState = visible,
                 enter = slideInVertically(
                     initialOffsetY = { it },
-                    animationSpec = tween(400, easing = EaseOutQuart)
+                    animationSpec = tween(400)
                 ) + fadeIn(animationSpec = tween(350)),
                 exit = slideOutVertically(
                     targetOffsetY = { it },
-                    animationSpec = tween(300, easing = EaseInQuart)
-                ) + fadeOut(animationSpec = tween(200))
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(250))
             ) {
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight(0.8f)
-                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
-                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                    color = MaterialTheme.colorScheme.background,
-                    shadowElevation = 8.dp
-                ) {
-                    // Keep the Scaffold within the Surface
-                    Scaffold(
-                        topBar = {
-                            TopAppBar(
-                                title = {
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = subject.name,
-                                            style = MaterialTheme.typography.titleLarge,
-                                            fontWeight = FontWeight.SemiBold,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
-                                },
-                                navigationIcon = {
-                                    IconButton(onClick = {
-                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                                        coroutineScope.launch {
-                                            visible.targetState = false
-                                            delay(300)
-                                            onDismiss()
-                                        }
-                                    }) {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                            contentDescription = "Back",
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                },
-                                colors = TopAppBarDefaults.topAppBarColors(
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                                ),
-                                actions = {
-                                    IconButton(onClick = { /* do nothing */ }, enabled = false) {
-                                        Box(modifier = Modifier.size(24.dp))
-                                    }
-                                }
+                        .animateContentSize(
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioLowBouncy,
+                                stiffness = Spring.StiffnessMediumLow
                             )
-                        }
-                    ) { paddingValues ->
-                        // Rest of your content remains the same
-                        // Just pass paddingValues to content
-                        Surface(
+                        )
+                        .fillMaxHeight(if (isExpanded) 1f else 0.85f)
+                        .offset { IntOffset(0, offsetY.roundToInt()) }
+                        .shadow(
+                            elevation = if (isExpanded) 16.dp else 8.dp,
+                            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+                        )
+                        .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = if (isExpanded) 6.dp else 4.dp
+                ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Header area (pill handle + title) - make this entire area draggable
+                        Box(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .padding(paddingValues),
-                            color = MaterialTheme.colorScheme.background
+                                .fillMaxWidth()
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures(
+                                        onDragEnd = {
+                                            // Determine if we should expand or collapse
+                                            if (offsetY < -dragThreshold && !isExpanded) {
+                                                isExpanded = true
+                                                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                            } else if (offsetY > dragThreshold && isExpanded) {
+                                                isExpanded = false
+                                                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                                            }
+
+                                            // Animate back to position
+                                            coroutineScope.launch {
+                                                animate(
+                                                    initialValue = offsetY,
+                                                    targetValue = 0f,
+                                                    animationSpec = spring(
+                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                        stiffness = Spring.StiffnessMedium
+                                                    )
+                                                ) { value, _ ->
+                                                    offsetY = value
+                                                }
+                                            }
+                                        },
+                                        onDragCancel = {
+                                            coroutineScope.launch {
+                                                animate(
+                                                    initialValue = offsetY,
+                                                    targetValue = 0f,
+                                                    animationSpec = spring(
+                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                        stiffness = Spring.StiffnessMedium
+                                                    )
+                                                ) { value, _ ->
+                                                    offsetY = value
+                                                }
+                                            }
+                                        },
+                                        onVerticalDrag = { change, dragAmount ->
+                                            change.consume()
+                                            lastDragAmount = dragAmount
+
+                                            // Calculate resistance based on expansion state and direction
+                                            val resistanceFactor = when {
+                                                isExpanded && dragAmount > 0 -> 0.6f // Pulling down when expanded
+                                                !isExpanded && dragAmount < 0 -> 0.7f // Pulling up when collapsed
+                                                isExpanded && dragAmount < 0 -> 0.2f // Pulling up when already expanded
+                                                !isExpanded && dragAmount > 0 -> 0.2f // Pulling down when already collapsed
+                                                else -> 0.5f
+                                            }
+
+                                            offsetY += dragAmount * resistanceFactor
+
+                                            // Apply limits to offset
+                                            offsetY = offsetY.coerceIn(-120f, 120f)
+                                        }
+                                    )
+                                }
                         ) {
-                            // Your existing content here
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                // Pill handle at the top
+                                Box(
+                                    modifier = Modifier
+                                        .padding(top = 12.dp, bottom = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    // Animated pill width
+                                    val pillWidth by animateFloatAsState(
+                                        targetValue = if (abs(offsetY) > 20f) 48f else 36f,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                                            stiffness = Spring.StiffnessLow
+                                        ),
+                                        label = "PillWidth"
+                                    )
+
+                                    Box(
+                                        modifier = Modifier
+                                            .width(pillWidth.dp)
+                                            .height(4.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                    alpha = if (isExpanded) 0.3f else 0.4f
+                                                )
+                                            )
+                                    )
+                                }
+
+                                // Subject title
+                                val titlePadding by animateFloatAsState(
+                                    targetValue = if (isExpanded) 12f else 16f,
+                                    label = "TitlePadding"
+                                )
+
+                                Text(
+                                    text = subject.name,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 48.dp, vertical = titlePadding.dp)
+                                )
+                            }
+                        }
+
+                        // Divider
+                        Divider(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = if (isExpanded) 0.dp else 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(
+                                alpha = if (isExpanded) 0.2f else 0.3f
+                            ),
+                            thickness = 0.5.dp
+                        )
+
+                        // Content area - normal scrolling here
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(
+                                    bottom = if (isExpanded) 0.dp else 8.dp
+                                )
+                        ) {
                             when {
                                 filteredRecords.isEmpty() -> {
                                     // Empty state
