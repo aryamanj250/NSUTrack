@@ -1,6 +1,5 @@
 package com.nsutrack.nsuttrial
 
-import android.R.attr.label
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -24,6 +23,9 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -40,7 +42,6 @@ import kotlin.math.roundToInt
 
 /**
  * Bottom sheet implementation for attendance details with fast, smooth animations
- * Optimized for 90% max height and faster transitions
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,6 +53,10 @@ fun DetailedAttendanceView(
     val records = subject.records
     val coroutineScope = rememberCoroutineScope()
 
+    // Get window size for precise calculations
+    val view = LocalView.current
+    val density = LocalDensity.current
+
     // Get current date to filter past records
     val currentDate = remember { Date() }
     val dateFormat = remember { SimpleDateFormat("MMM-dd", Locale.getDefault()) }
@@ -61,27 +66,23 @@ fun DetailedAttendanceView(
     val currentMonth = currentDateString.split("-")[0]
     val currentDay = currentDateString.split("-")[1].toIntOrNull() ?: 0
 
-    // Filter records to show only past dates with actual classes
+    // Filter records
     val filteredRecords = records.filter { record ->
-        // First filter dates
         val dateParts = record.date.split("-")
-        if (dateParts.size < 2) return@filter false // Invalid date format
+        if (dateParts.size < 2) return@filter false
 
         val month = dateParts[0]
         val day = dateParts[1].toIntOrNull() ?: 0
 
-        // Check date is in past
         val isPastDate = if (month != currentMonth) {
-            true // Different month than current is fine
+            true
         } else {
-            day <= currentDay // For current month, only show up to current day
+            day <= currentDay
         }
 
-        // Check status - only include status that indicates class actually happened
         val isActualClass = when (record.status) {
-            "0", "1", // Absent or Present
-            "0+0", "0+1", "1+0", "1+1" -> true // Combined statuses for multiple periods
-            else -> false // GH, H, CS, TL, MS, CR, etc. are not actual classes
+            "0", "1", "0+0", "0+1", "1+0", "1+1" -> true
+            else -> false
         }
 
         return@filter isPastDate && isActualClass
@@ -90,53 +91,50 @@ fun DetailedAttendanceView(
     // Group attendance records by month
     val groupedRecords = filteredRecords.groupBy {
         it.date.split("-").firstOrNull() ?: ""
-    }.toList()
-
-    // Sort groups by month (assuming format is "MMM-DD")
-    val sortedGroups = groupedRecords.sortedByDescending { it.first }
+    }.toList().sortedByDescending { it.first }
 
     // Keep track of expanded month sections
-    val expandedMonths = remember { mutableStateOf(setOf(sortedGroups.firstOrNull()?.first ?: "")) }
+    val expandedMonths = remember { mutableStateOf(setOf(groupedRecords.firstOrNull()?.first ?: "")) }
 
-    // Bottom sheet state using constants instead of enum
+    // Define sheet states - use Int to avoid type issues
     val EXPANDED = 0
     val HALF_EXPANDED = 1
     val HIDDEN = 2
 
-    // Animation state for smooth entry/exit
+    // Animation state for entry/exit
     val visible = remember { MutableTransitionState(false) }
 
-    // Sheet state controller
+    // Sheet state and drag state
     var sheetState by remember { mutableStateOf(HALF_EXPANDED) }
     var dragOffset by remember { mutableStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
     var velocityTracker by remember { mutableStateOf(0f) }
 
-    // Standard Material animation curves with faster timing
+    // Animation curves
     val standardEasing = FastOutSlowInEasing
-    val emphasizedEasing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+    val emphasizedEasing = CubicBezierEasing(0.1f, 0.7f, 0.1f, 1.0f)
 
     LaunchedEffect(Unit) {
-        delay(50)  // Short delay to ensure UI is ready
+        delay(50)
         visible.targetState = true
     }
 
-    // Handle back button press with animation
+    // Handle back button
     BackHandler {
         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
         coroutineScope.launch {
             visible.targetState = false
-            delay(200)  // Reduced delay time for faster dismissal
+            delay(200)
             onDismiss()
         }
     }
 
-    // Full screen dialog with optimized animations
+    // Full screen dialog
     Dialog(
         onDismissRequest = {
             coroutineScope.launch {
                 visible.targetState = false
-                delay(200) // Faster dismissal animation
+                delay(200)
                 onDismiss()
             }
         },
@@ -150,17 +148,10 @@ fun DetailedAttendanceView(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.BottomCenter
         ) {
-            // Scrim with faster fade animation
+            // Scrim with animation
             val scrimAlpha by animateFloatAsState(
-                targetValue = when (sheetState) {
-                    EXPANDED -> 0.65f
-                    HALF_EXPANDED -> 0.5f
-                    else -> 0f
-                },
-                animationSpec = tween(
-                    durationMillis = 200, // Faster animation
-                    easing = standardEasing
-                ),
+                targetValue = if (sheetState == EXPANDED) 0.65f else if (sheetState == HALF_EXPANDED) 0.5f else 0f,
+                animationSpec = tween(200, easing = standardEasing),
                 label = "ScrimAlpha"
             )
 
@@ -180,7 +171,7 @@ fun DetailedAttendanceView(
                         } else {
                             coroutineScope.launch {
                                 sheetState = HIDDEN
-                                delay(100) // Faster transitions
+                                delay(150)
                                 visible.targetState = false
                                 delay(150)
                                 onDismiss()
@@ -189,42 +180,24 @@ fun DetailedAttendanceView(
                     }
             )
 
-            // Main sheet with optimized, faster animation
+            // Main sheet with animation
             AnimatedVisibility(
                 visible = visible.targetState,
                 enter = slideInVertically(
                     initialOffsetY = { it },
-                    animationSpec = tween(
-                        durationMillis = 250, // Faster entry animation
-                        easing = emphasizedEasing
-                    )
-                ) + fadeIn(
-                    initialAlpha = 0f,
-                    animationSpec = tween(
-                        durationMillis = 200, // Faster fade in
-                        easing = standardEasing
-                    )
-                ),
+                    animationSpec = tween(250, easing = emphasizedEasing)
+                ) + fadeIn(tween(200)),
                 exit = slideOutVertically(
                     targetOffsetY = { it },
-                    animationSpec = tween(
-                        durationMillis = 180, // Faster exit animation
-                        easing = standardEasing
-                    )
-                ) + fadeOut(
-                    targetAlpha = 0f,
-                    animationSpec = tween(
-                        durationMillis = 150 // Faster fade out
-                    )
-                )
+                    animationSpec = tween(180, easing = standardEasing)
+                ) + fadeOut(tween(150))
             ) {
-                // Sheet height animation with physics-based spring - MAX 90% HEIGHT
-                val sheetHeight by animateFloatAsState(
-                    targetValue = when (sheetState) {
-                        EXPANDED -> 0.9f
-                        HALF_EXPANDED -> 0.8f
-                        else -> 0f
-                    }.toFloat(), // Add explicit conversion to Float
+                // Get the exact screen height to calculate precise sheet height
+                var screenHeight by remember { mutableStateOf(0) }
+
+                // Sheet height with precise calculation based on screen size
+                val sheetHeightFraction by animateFloatAsState(
+                    targetValue = if (sheetState == EXPANDED) 0.93f else if (sheetState == HALF_EXPANDED) 0.8f else 0f,
                     animationSpec = spring(
                         dampingRatio = 0.7f,
                         stiffness = 400f,
@@ -233,45 +206,29 @@ fun DetailedAttendanceView(
                     label = "SheetHeight"
                 )
 
-                // Elevation animation
-                val sheetElevation by animateFloatAsState(
-                    targetValue = when (sheetState) {
-                        EXPANDED -> 8f
-                        HALF_EXPANDED -> 4f
-                        else -> 0f
-                    },
-                    animationSpec = tween(
-                        durationMillis = 150, // Faster animation
-                        easing = standardEasing
-                    ),
-                    label = "SheetElevation"
-                )
+                // Calculated exact height in pixels
+                val sheetHeightPx = if (screenHeight > 0) {
+                    (screenHeight * sheetHeightFraction).roundToInt()
+                } else {
+                    0
+                }
 
-                // Corner radius with faster animation
-                val cornerRadius by animateFloatAsState(
-                    targetValue = when (sheetState) {
-                        EXPANDED -> 16f
-                        HALF_EXPANDED -> 28f
-                        else -> 28f
-                    },
-                    animationSpec = tween(
-                        durationMillis = 200, // Faster animation
-                        easing = standardEasing
-                    ),
-                    label = "CornerRadius"
-                )
-
-                // Main sheet surface
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight(sheetHeight)
+                        .height(with(density) { sheetHeightPx.toDp() })
                         .offset { IntOffset(0, dragOffset.roundToInt()) }
+                        .onSizeChanged {
+                            // Store the screen height for precise calculations
+                            if (screenHeight == 0) {
+                                screenHeight = view.height
+                            }
+                        }
                         .graphicsLayer {
-                            this.shadowElevation = sheetElevation
+                            this.shadowElevation = if (sheetState == EXPANDED) 8f else 4f
                             this.shape = RoundedCornerShape(
-                                topStart = cornerRadius.dp,
-                                topEnd = cornerRadius.dp
+                                topStart = if (sheetState == EXPANDED) 16.dp else 28.dp,
+                                topEnd = if (sheetState == EXPANDED) 16.dp else 28.dp
                             )
                             clip = true
                         },
@@ -281,7 +238,7 @@ fun DetailedAttendanceView(
                     Column(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        // Draggable header with faster interactions
+                        // Draggable header
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -293,37 +250,31 @@ fun DetailedAttendanceView(
                                         onDragEnd = {
                                             isDragging = false
 
-                                            // Fast snap behavior
                                             coroutineScope.launch {
                                                 val currentVelocity = velocityTracker
-                                                val velocityThreshold = 250f // Lower threshold for faster response
-                                                val offsetThreshold = 30f // Lower threshold for faster response
+                                                val velocityThreshold = 250f
+                                                val offsetThreshold = 30f
 
-                                                // Determine target state based on velocity and position
                                                 when {
-                                                    // Fast downward fling when expanded
                                                     currentVelocity > velocityThreshold && sheetState == EXPANDED -> {
                                                         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
                                                         sheetState = HALF_EXPANDED
                                                     }
 
-                                                    // Fast downward fling when half expanded (dismiss)
                                                     currentVelocity > velocityThreshold * 1.5f && sheetState == HALF_EXPANDED -> {
                                                         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
                                                         sheetState = HIDDEN
-                                                        delay(150) // Faster transitions
+                                                        delay(150)
                                                         visible.targetState = false
                                                         delay(150)
                                                         onDismiss()
                                                     }
 
-                                                    // Fast upward fling when half expanded
                                                     currentVelocity < -velocityThreshold && sheetState == HALF_EXPANDED -> {
                                                         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
                                                         sheetState = EXPANDED
                                                     }
 
-                                                    // Position-based decisions
                                                     dragOffset > offsetThreshold && sheetState == EXPANDED -> {
                                                         sheetState = HALF_EXPANDED
                                                     }
@@ -332,18 +283,16 @@ fun DetailedAttendanceView(
                                                     }
                                                     dragOffset > offsetThreshold * 2 && sheetState == HALF_EXPANDED -> {
                                                         sheetState = HIDDEN
-                                                        delay(150) // Faster transitions
+                                                        delay(150)
                                                         visible.targetState = false
                                                         delay(150)
                                                         onDismiss()
                                                     }
 
-                                                    // Return to current state
                                                     else -> {
-                                                        // Fast animation to return to neutral position
                                                         val springSpec = spring<Float>(
-                                                            dampingRatio = 0.7f, // Less bouncy
-                                                            stiffness = 500f // Stiffer spring for faster movement
+                                                            dampingRatio = 0.7f,
+                                                            stiffness = 500f
                                                         )
                                                         animate(
                                                             initialValue = dragOffset,
@@ -355,14 +304,12 @@ fun DetailedAttendanceView(
                                                     }
                                                 }
 
-                                                // Reset velocity tracker
                                                 velocityTracker = 0f
                                             }
                                         },
                                         onDragCancel = {
                                             isDragging = false
                                             coroutineScope.launch {
-                                                // Fast animation to neutral
                                                 animate(
                                                     initialValue = dragOffset,
                                                     targetValue = 0f,
@@ -378,31 +325,21 @@ fun DetailedAttendanceView(
                                         onVerticalDrag = { change, dragAmount ->
                                             change.consume()
 
-                                            // Resistance calculation
                                             val baseResistance = 0.5f
 
-                                            // State-specific resistance
                                             val stateResistance = when (sheetState) {
-                                                EXPANDED -> {
-                                                    if (dragAmount > 0) 1.0f else 0.3f // Allow down, resist up strongly
-                                                }
-                                                HALF_EXPANDED -> {
-                                                    if (dragAmount < 0) 0.9f else 0.8f // Balanced resistance
-                                                }
-                                                else -> 0f // No dragging when hidden
+                                                EXPANDED -> if (dragAmount > 0) 1.0f else 0.3f
+                                                HALF_EXPANDED -> if (dragAmount < 0) 0.9f else 0.8f
+                                                else -> 0f
                                             }
 
-                                            // Progressive resistance
                                             val progressiveFactor = 1.0f - (abs(dragOffset) / 300f).coerceIn(0f, 0.5f)
 
-                                            // Track velocity
                                             velocityTracker = 0.75f * velocityTracker + 0.25f * dragAmount * 16f
 
-                                            // Apply resistance
                                             val effectiveResistance = baseResistance * stateResistance * progressiveFactor
                                             dragOffset += dragAmount * effectiveResistance
 
-                                            // Constraints
                                             dragOffset = dragOffset.coerceIn(-80f, 200f)
                                         }
                                     )
@@ -414,24 +351,20 @@ fun DetailedAttendanceView(
                                     .padding(bottom = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                // Drag handle with faster animation
+                                // Handle
                                 Box(
                                     modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    // Handle properties with faster animation
                                     val handleWidth by animateFloatAsState(
                                         targetValue = if (isDragging) 48f else 36f,
-                                        animationSpec = tween(
-                                            durationMillis = 100, // Faster animation
-                                            easing = LinearOutSlowInEasing
-                                        ),
+                                        animationSpec = tween(100),
                                         label = "HandleWidth"
                                     )
 
                                     val handleOpacity by animateFloatAsState(
                                         targetValue = if (isDragging) 0.8f else 0.4f,
-                                        animationSpec = tween(120), // Faster animation
+                                        animationSpec = tween(120),
                                         label = "HandleOpacity"
                                     )
 
@@ -448,10 +381,10 @@ fun DetailedAttendanceView(
                                     )
                                 }
 
-                                // Title with faster animation
+                                // Title
                                 val titleScale by animateFloatAsState(
                                     targetValue = if (sheetState == EXPANDED) 1f else 0.98f,
-                                    animationSpec = tween(150), // Faster animation
+                                    animationSpec = tween(150),
                                     label = "TitleScale"
                                 )
 
@@ -471,10 +404,10 @@ fun DetailedAttendanceView(
                             }
                         }
 
-                        // Divider with faster animation
+                        // Divider
                         val dividerAlpha by animateFloatAsState(
                             targetValue = if (isDragging) 0.7f else 0.25f,
-                            animationSpec = tween(100), // Faster animation
+                            animationSpec = tween(100),
                             label = "DividerAlpha"
                         )
 
@@ -490,7 +423,7 @@ fun DetailedAttendanceView(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(bottom = if (sheetState == EXPANDED) 16.dp else 16.dp)
+                                .fillMaxWidth()
                         ) {
                             when {
                                 filteredRecords.isEmpty() -> {
@@ -514,17 +447,17 @@ fun DetailedAttendanceView(
                                             start = 16.dp,
                                             end = 16.dp,
                                             top = 8.dp,
-                                            bottom = 40.dp // Extra bottom padding to prevent empty space
-                                        ),
-                                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                                            // Critical: Extra bottom padding to ensure content fills past bottom nav
+                                            bottom = 120.dp
+                                        )
                                     ) {
                                         item {
                                             AttendanceHeader(subject)
                                         }
 
                                         items(
-                                            items = sortedGroups,
-                                            key = { it.first } // Use month as stable key
+                                            items = groupedRecords,
+                                            key = { it.first }
                                         ) { (month, monthRecords) ->
                                             MonthSection(
                                                 month = month,
@@ -544,6 +477,11 @@ fun DetailedAttendanceView(
                                                         }
                                                 }
                                             )
+                                        }
+
+                                        // Extra spacer at bottom to ensure content scrolls past navigation bar
+                                        item {
+                                            Spacer(modifier = Modifier.height(80.dp))
                                         }
                                     }
                                 }
@@ -621,7 +559,7 @@ fun AttendanceHeader(subject: SubjectData) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Attendance advice card with contextual colors
+        // Attendance advice card
         val targetPercentage = 75.0
         val currentPercentage = subject.attendancePercentage
 
@@ -636,7 +574,7 @@ fun AttendanceHeader(subject: SubjectData) {
             "You need to attend next $classesNeeded classes"
         }
 
-        // Card colors based on status
+        // Card colors
         val bgColor = if (currentPercentage >= targetPercentage) {
             Color(0xFFE8F5E9) // Light Green
         } else {
@@ -679,7 +617,6 @@ fun AttendanceHeader(subject: SubjectData) {
     }
 }
 
-// MonthSection component
 @Composable
 fun MonthSection(
     month: String,
@@ -719,13 +656,10 @@ fun MonthSection(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    // Rotation animation for arrow
+                    // Arrow animation
                     val rotation by animateFloatAsState(
                         targetValue = if (isExpanded) 180f else 0f,
-                        animationSpec = tween(
-                            durationMillis = 200, // Faster rotation
-                            easing = FastOutSlowInEasing
-                        ),
+                        animationSpec = tween(200),
                         label = "ArrowRotation"
                     )
 
@@ -741,30 +675,11 @@ fun MonthSection(
             }
         }
 
-        // Records with faster expand/collapse animation
+        // Records with animation
         AnimatedVisibility(
             visible = isExpanded,
-            enter = expandVertically(
-                expandFrom = Alignment.Top,
-                animationSpec = tween(
-                    durationMillis = 200, // Faster expand
-                    easing = FastOutSlowInEasing
-                )
-            ) + fadeIn(
-                animationSpec = tween(
-                    durationMillis = 200,
-                    easing = LinearOutSlowInEasing
-                )
-            ),
-            exit = shrinkVertically(
-                shrinkTowards = Alignment.Top,
-                animationSpec = tween(
-                    durationMillis = 150, // Faster collapse
-                    easing = FastOutSlowInEasing
-                )
-            ) + fadeOut(
-                animationSpec = tween(120) // Faster fade out
-            )
+            enter = expandVertically(tween(200)) + fadeIn(tween(200)),
+            exit = shrinkVertically(tween(150)) + fadeOut(tween(120))
         ) {
             Column(
                 modifier = Modifier
@@ -772,35 +687,30 @@ fun MonthSection(
                     .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Sort records by day in descending order (latest first)
-                val sortedRecords = records.sortedByDescending {
-                    it.date.split("-").getOrNull(1)?.toIntOrNull() ?: 0
-                }
-
-                // Group records by type for organized display
-                val normalRecords = sortedRecords.filter {
+                // Group records
+                val normalRecords = records.filter {
                     it.status == "0" || it.status == "1" ||
                             it.status == "0+0" || it.status == "1+1" ||
                             it.status == "0+1" || it.status == "1+0"
                 }
 
-                val holidayRecords = sortedRecords.filter {
+                val holidayRecords = records.filter {
                     it.status == "GH" || it.status == "H" || it.status == "CS" || it.status == "TL"
                 }
 
-                val specialRecords = sortedRecords.filter {
+                val specialRecords = records.filter {
                     it.status == "MS" || it.status == "CR" ||
                             (!normalRecords.contains(it) && !holidayRecords.contains(it))
                 }
 
-                // Display normal classes first (present/absent)
+                // Display normal classes
                 if (normalRecords.isNotEmpty()) {
                     normalRecords.forEach { record ->
                         RecordRow(record)
                     }
                 }
 
-                // Then display special cases like mid-sem exams
+                // Special cases
                 if (specialRecords.isNotEmpty()) {
                     Text(
                         text = "Special Sessions",
@@ -815,8 +725,7 @@ fun MonthSection(
                     }
                 }
 
-// Finally display holidays
-// Finally display holidays
+                // Holidays
                 if (holidayRecords.isNotEmpty()) {
                     Text(
                         text = "Holidays & Cancellations",
@@ -837,33 +746,11 @@ fun MonthSection(
 
 @Composable
 fun RecordRow(record: AttendanceRecord) {
-    // Format the day better
+    // Format the date
     val day = record.date.split("-").getOrNull(1)?.toIntOrNull() ?: 0
-
-    // Get month for context
     val month = record.date.split("-").getOrNull(0) ?: ""
-
-    // Format date properly
-    val monthNum = when(month) {
-        "Jan" -> 1
-        "Feb" -> 2
-        "Mar" -> 3
-        "Apr" -> 4
-        "May" -> 5
-        "Jun" -> 6
-        "Jul" -> 7
-        "Aug" -> 8
-        "Sep" -> 9
-        "Oct" -> 10
-        "Nov" -> 11
-        "Dec" -> 12
-        else -> 1
-    }
-
-    // Create date string in proper format
     val dateString = "$day $month"
 
-    // Card with subtle elevation
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -879,7 +766,6 @@ fun RecordRow(record: AttendanceRecord) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Show day with better formatting
             Text(
                 text = dateString,
                 style = MaterialTheme.typography.bodyLarge,
@@ -887,7 +773,6 @@ fun RecordRow(record: AttendanceRecord) {
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            // Format the status with styling
             AttendanceStatusView(status = record.status)
         }
     }

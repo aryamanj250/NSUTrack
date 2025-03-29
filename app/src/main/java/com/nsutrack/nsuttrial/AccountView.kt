@@ -24,6 +24,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -36,7 +39,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Optimized Profile View with faster animations and 90% max height
+ * Optimized Profile View with fixed bottom spacing
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,38 +53,42 @@ fun AccountView(
     val hapticFeedback = HapticFeedback.getHapticFeedback()
     val coroutineScope = rememberCoroutineScope()
 
-    // Animation state for fast entry/exit
+    // Get window size for precise calculations
+    val view = LocalView.current
+    val density = LocalDensity.current
+
+    // Animation state for entry/exit
     val visible = remember {
         MutableTransitionState(false).apply {
             targetState = true
         }
     }
 
-    // Sheet states with clear naming
+    // Sheet states
     val EXPANDED = 0
     val HALF_EXPANDED = 1
     val HIDDEN = 2
 
-    // Handle back button press with faster animation
+    // Handle back button
     BackHandler {
         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
         coroutineScope.launch {
             visible.targetState = false
-            delay(200)  // Faster exit
+            delay(200)
             onDismiss()
         }
     }
 
-    // Fast animation curves
-    val emphasizedEasing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+    // Animation curves
+    val emphasizedEasing = CubicBezierEasing(0.1f, 0.7f, 0.1f, 1.0f)
     val standardEasing = FastOutSlowInEasing
 
-    // Dialog with optimized properties
+    // Dialog
     Dialog(
         onDismissRequest = {
             coroutineScope.launch {
                 visible.targetState = false
-                delay(200) // Faster exit
+                delay(200)
                 onDismiss()
             }
         },
@@ -91,7 +98,7 @@ fun AccountView(
             usePlatformDefaultWidth = false
         )
     ) {
-        // Track sheet state with fast transitions
+        // Track sheet state
         var sheetState by remember { mutableStateOf(HALF_EXPANDED) }
         var isDragging by remember { mutableStateOf(false) }
         var dragOffset by remember { mutableStateOf(0f) }
@@ -101,17 +108,10 @@ fun AccountView(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.BottomCenter
         ) {
-            // Fast scrim animation
+            // Scrim animation
             val scrimAlpha by animateFloatAsState(
-                targetValue = when (sheetState) {
-                    EXPANDED -> 0.65f
-                    HALF_EXPANDED -> 0.5f
-                    else -> 0f
-                },
-                animationSpec = tween(
-                    durationMillis = 200, // Faster fade
-                    easing = standardEasing
-                ),
+                targetValue = if (sheetState == EXPANDED) 0.65f else if (sheetState == HALF_EXPANDED) 0.5f else 0f,
+                animationSpec = tween(200, easing = standardEasing),
                 label = "ScrimAlpha"
             )
 
@@ -131,7 +131,7 @@ fun AccountView(
                         } else {
                             coroutineScope.launch {
                                 sheetState = HIDDEN
-                                delay(100) // Faster transitions
+                                delay(150)
                                 visible.targetState = false
                                 delay(150)
                                 onDismiss()
@@ -140,42 +140,24 @@ fun AccountView(
                     }
             )
 
-            // Fast sheet animation
+            // Main sheet
             AnimatedVisibility(
                 visible = visible.targetState,
                 enter = slideInVertically(
                     initialOffsetY = { it },
-                    animationSpec = tween(
-                        durationMillis = 250, // Faster entry
-                        easing = emphasizedEasing
-                    )
-                ) + fadeIn(
-                    initialAlpha = 0f,
-                    animationSpec = tween(
-                        durationMillis = 200, // Faster fade in
-                        easing = standardEasing
-                    )
-                ),
+                    animationSpec = tween(250, easing = emphasizedEasing)
+                ) + fadeIn(tween(200)),
                 exit = slideOutVertically(
                     targetOffsetY = { it },
-                    animationSpec = tween(
-                        durationMillis = 180, // Faster exit
-                        easing = standardEasing
-                    )
-                ) + fadeOut(
-                    targetAlpha = 0f,
-                    animationSpec = tween(
-                        durationMillis = 150 // Faster fade out
-                    )
-                )
+                    animationSpec = tween(180, easing = standardEasing)
+                ) + fadeOut(tween(150))
             ) {
-                // MAX 90% height sheet
-                val sheetHeight by animateFloatAsState(
-                    targetValue = when (sheetState) {
-                        EXPANDED -> 0.9f
-                        HALF_EXPANDED -> 0.8f
-                        else -> 0f
-                    }.toFloat(), // Add explicit conversion to Float
+                // Get exact screen height
+                var screenHeight by remember { mutableStateOf(0) }
+
+                // Sheet height with precise calculation
+                val sheetHeightFraction by animateFloatAsState(
+                    targetValue = if (sheetState == EXPANDED) 0.93f else if (sheetState == HALF_EXPANDED) 0.8f else 0f,
                     animationSpec = spring(
                         dampingRatio = 0.7f,
                         stiffness = 400f,
@@ -184,45 +166,29 @@ fun AccountView(
                     label = "SheetHeight"
                 )
 
-                // Fast elevation animation
-                val sheetElevation by animateFloatAsState(
-                    targetValue = when (sheetState) {
-                        EXPANDED -> 8f
-                        HALF_EXPANDED -> 4f
-                        else -> 0f
-                    },
-                    animationSpec = tween(
-                        durationMillis = 150, // Faster animation
-                        easing = standardEasing
-                    ),
-                    label = "SheetElevation"
-                )
+                // Calculate height in pixels
+                val sheetHeightPx = if (screenHeight > 0) {
+                    (screenHeight * sheetHeightFraction).roundToInt()
+                } else {
+                    0
+                }
 
-                // Fast corner radius animation
-                val cornerRadius by animateFloatAsState(
-                    targetValue = when (sheetState) {
-                        EXPANDED -> 16f
-                        HALF_EXPANDED -> 28f
-                        else -> 28f
-                    },
-                    animationSpec = tween(
-                        durationMillis = 200, // Faster animation
-                        easing = standardEasing
-                    ),
-                    label = "CornerRadius"
-                )
-
-                // Sheet surface
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight(sheetHeight)
+                        .height(with(density) { sheetHeightPx.toDp() })
                         .offset { IntOffset(0, dragOffset.roundToInt()) }
+                        .onSizeChanged {
+                            // Store screen height
+                            if (screenHeight == 0) {
+                                screenHeight = view.height
+                            }
+                        }
                         .graphicsLayer {
-                            this.shadowElevation = sheetElevation
+                            this.shadowElevation = if (sheetState == EXPANDED) 8f else 4f
                             this.shape = RoundedCornerShape(
-                                topStart = cornerRadius.dp,
-                                topEnd = cornerRadius.dp
+                                topStart = if (sheetState == EXPANDED) 16.dp else 28.dp,
+                                topEnd = if (sheetState == EXPANDED) 16.dp else 28.dp
                             )
                             clip = true
                         },
@@ -230,7 +196,7 @@ fun AccountView(
                     tonalElevation = 2.dp
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        // Fast drag handle
+                        // Draggable header
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -242,13 +208,11 @@ fun AccountView(
                                         onDragEnd = {
                                             isDragging = false
 
-                                            // Fast snap behavior
                                             coroutineScope.launch {
                                                 val currentVelocity = velocityTracker
-                                                val velocityThreshold = 250f // Lower threshold for faster response
-                                                val offsetThreshold = 30f // Lower threshold for faster response
+                                                val velocityThreshold = 250f
+                                                val offsetThreshold = 30f
 
-                                                // Determine target state quickly
                                                 when {
                                                     // Fast downward fling when expanded
                                                     currentVelocity > velocityThreshold && sheetState == EXPANDED -> {
@@ -256,11 +220,11 @@ fun AccountView(
                                                         sheetState = HALF_EXPANDED
                                                     }
 
-                                                    // Fast downward fling when half expanded (dismiss)
+                                                    // Fast downward fling when half expanded
                                                     currentVelocity > velocityThreshold * 1.5f && sheetState == HALF_EXPANDED -> {
                                                         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
                                                         sheetState = HIDDEN
-                                                        delay(150) // Faster transitions
+                                                        delay(150)
                                                         visible.targetState = false
                                                         delay(150)
                                                         onDismiss()
@@ -272,7 +236,7 @@ fun AccountView(
                                                         sheetState = EXPANDED
                                                     }
 
-                                                    // Quick position-based decisions
+                                                    // Position-based decisions
                                                     dragOffset > offsetThreshold && sheetState == EXPANDED -> {
                                                         sheetState = HALF_EXPANDED
                                                     }
@@ -281,17 +245,16 @@ fun AccountView(
                                                     }
                                                     dragOffset > offsetThreshold * 2 && sheetState == HALF_EXPANDED -> {
                                                         sheetState = HIDDEN
-                                                        delay(150) // Faster transitions
+                                                        delay(150)
                                                         visible.targetState = false
                                                         delay(150)
                                                         onDismiss()
                                                     }
 
-                                                    // Fast return to current state
                                                     else -> {
                                                         val springSpec = spring<Float>(
-                                                            dampingRatio = 0.7f, // Less bouncy
-                                                            stiffness = 500f // Stiffer spring for faster movement
+                                                            dampingRatio = 0.7f,
+                                                            stiffness = 500f
                                                         )
                                                         animate(
                                                             initialValue = dragOffset,
@@ -303,14 +266,12 @@ fun AccountView(
                                                     }
                                                 }
 
-                                                // Reset velocity tracker
                                                 velocityTracker = 0f
                                             }
                                         },
                                         onDragCancel = {
                                             isDragging = false
                                             coroutineScope.launch {
-                                                // Fast animation to neutral
                                                 animate(
                                                     initialValue = dragOffset,
                                                     targetValue = 0f,
@@ -326,31 +287,21 @@ fun AccountView(
                                         onVerticalDrag = { change, dragAmount ->
                                             change.consume()
 
-                                            // Quick resistance calculation
                                             val baseResistance = 0.5f
 
-                                            // State-specific resistance
                                             val stateResistance = when (sheetState) {
-                                                EXPANDED -> {
-                                                    if (dragAmount > 0) 1.0f else 0.3f // Allow down, resist up strongly
-                                                }
-                                                HALF_EXPANDED -> {
-                                                    if (dragAmount < 0) 0.9f else 0.8f // Balanced resistance
-                                                }
-                                                else -> 0f // No dragging when hidden
+                                                EXPANDED -> if (dragAmount > 0) 1.0f else 0.3f
+                                                HALF_EXPANDED -> if (dragAmount < 0) 0.9f else 0.8f
+                                                else -> 0f
                                             }
 
-                                            // Progressive resistance
                                             val progressiveFactor = 1.0f - (abs(dragOffset) / 300f).coerceIn(0f, 0.5f)
 
-                                            // Fast velocity tracking
                                             velocityTracker = 0.75f * velocityTracker + 0.25f * dragAmount * 16f
 
-                                            // Apply resistance
                                             val effectiveResistance = baseResistance * stateResistance * progressiveFactor
                                             dragOffset += dragAmount * effectiveResistance
 
-                                            // Hard limits
                                             dragOffset = dragOffset.coerceIn(-80f, 200f)
                                         }
                                     )
@@ -362,24 +313,20 @@ fun AccountView(
                                     .padding(bottom = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                // Fast handle animation
+                                // Handle
                                 Box(
                                     modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    // Fast handle properties
                                     val handleWidth by animateFloatAsState(
                                         targetValue = if (isDragging) 48f else 36f,
-                                        animationSpec = tween(
-                                            durationMillis = 100, // Faster animation
-                                            easing = LinearOutSlowInEasing
-                                        ),
+                                        animationSpec = tween(100),
                                         label = "HandleWidth"
                                     )
 
                                     val handleOpacity by animateFloatAsState(
                                         targetValue = if (isDragging) 0.8f else 0.4f,
-                                        animationSpec = tween(120), // Faster animation
+                                        animationSpec = tween(120),
                                         label = "HandleOpacity"
                                     )
 
@@ -396,10 +343,10 @@ fun AccountView(
                                     )
                                 }
 
-                                // Title with fast animation
+                                // Title
                                 val titleScale by animateFloatAsState(
                                     targetValue = if (sheetState == EXPANDED) 1f else 0.98f,
-                                    animationSpec = tween(150), // Faster animation
+                                    animationSpec = tween(150),
                                     label = "TitleScale"
                                 )
 
@@ -419,10 +366,10 @@ fun AccountView(
                             }
                         }
 
-                        // Fast divider animation
+                        // Divider
                         val dividerAlpha by animateFloatAsState(
                             targetValue = if (isDragging) 0.7f else 0.25f,
-                            animationSpec = tween(100), // Faster animation
+                            animationSpec = tween(100),
                             label = "DividerAlpha"
                         )
 
@@ -434,15 +381,15 @@ fun AccountView(
                             thickness = 0.5.dp
                         )
 
-                        // Content area with fixed bottom padding
+                        // Content area
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(bottom = 16.dp) // Consistent bottom padding
+                                .fillMaxWidth()
                         ) {
                             when {
                                 isLoading -> {
-                                    // Loading state with fast animation
+                                    // Loading state
                                     Box(
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
@@ -452,7 +399,7 @@ fun AccountView(
                                             initialValue = 1f,
                                             targetValue = 1.1f,
                                             animationSpec = infiniteRepeatable(
-                                                animation = tween(800), // Faster animation
+                                                animation = tween(800),
                                                 repeatMode = RepeatMode.Reverse
                                             ),
                                             label = "LoadingScale"
@@ -515,14 +462,15 @@ fun AccountView(
                                 }
 
                                 profileData != null -> {
-                                    // Profile data with improved LazyColumn
+                                    // Profile data
                                     LazyColumn(
                                         modifier = Modifier.fillMaxSize(),
                                         contentPadding = PaddingValues(
                                             start = 20.dp,
                                             end = 20.dp,
                                             top = 8.dp,
-                                            bottom = 40.dp // Extra bottom padding to prevent empty space
+                                            // Critical: Extra bottom padding to ensure content fills past bottom nav
+                                            bottom = 120.dp
                                         ),
                                         verticalArrangement = Arrangement.spacedBy(24.dp)
                                     ) {
@@ -603,6 +551,11 @@ fun AccountView(
                                                 }
                                             )
                                         }
+
+                                        // Extra spacer
+                                        item {
+                                            Spacer(modifier = Modifier.height(80.dp))
+                                        }
                                     }
                                 }
 
@@ -636,7 +589,7 @@ fun ProfileHeader(name: String, studentId: String) {
             .padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Profile avatar with fast enter animation
+        // Avatar animation
         var isLoaded by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) {
             delay(100)
@@ -647,14 +600,14 @@ fun ProfileHeader(name: String, studentId: String) {
             targetValue = if (isLoaded) 1f else 0.8f,
             animationSpec = spring(
                 dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMedium // Higher stiffness for faster animation
+                stiffness = Spring.StiffnessMedium
             ),
             label = "AvatarScale"
         )
 
         val avatarAlpha by animateFloatAsState(
             targetValue = if (isLoaded) 1f else 0f,
-            animationSpec = tween(250), // Faster fade in
+            animationSpec = tween(250),
             label = "AvatarAlpha"
         )
 
@@ -684,10 +637,10 @@ fun ProfileHeader(name: String, studentId: String) {
         // Fast text animations
         AnimatedVisibility(
             visible = isLoaded,
-            enter = fadeIn(animationSpec = tween(300)) + // Faster fade in
+            enter = fadeIn(animationSpec = tween(300)) +
                     slideInVertically(
                         initialOffsetY = { -20 },
-                        animationSpec = tween(300, easing = EaseOutQuad) // Faster entry
+                        animationSpec = tween(300, easing = EaseOutQuad)
                     )
         ) {
             Text(
@@ -700,9 +653,9 @@ fun ProfileHeader(name: String, studentId: String) {
 
         AnimatedVisibility(
             visible = isLoaded,
-            enter = fadeIn(animationSpec = tween(350, delayMillis = 80)) + // Faster fade with shorter delay
+            enter = fadeIn(animationSpec = tween(350, delayMillis = 80)) +
                     expandVertically(
-                        animationSpec = tween(300, delayMillis = 80, easing = EaseOutQuad) // Faster expansion
+                        animationSpec = tween(300, delayMillis = 80, easing = EaseOutQuad)
                     )
         ) {
             Text(
@@ -727,7 +680,7 @@ fun ProfileSection(
             .animateContentSize(
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMedium // Higher stiffness for faster animation
+                    stiffness = Spring.StiffnessMedium
                 )
             )
     ) {
@@ -797,10 +750,10 @@ fun ProfileRow(label: String, value: String) {
 
     AnimatedVisibility(
         visible = isVisible,
-        enter = fadeIn(animationSpec = tween(250)) + // Faster fade in
+        enter = fadeIn(animationSpec = tween(250)) +
                 slideInHorizontally(
                     initialOffsetX = { -20 },
-                    animationSpec = tween(250, easing = EaseOutQuad) // Faster slide in
+                    animationSpec = tween(250, easing = EaseOutQuad)
                 )
     ) {
         Column(
