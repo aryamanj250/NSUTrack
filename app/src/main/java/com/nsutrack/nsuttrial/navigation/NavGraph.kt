@@ -13,6 +13,7 @@ import com.nsutrack.nsuttrial.LoginScreen
 import com.nsutrack.nsuttrial.HomeScreen
 import com.nsutrack.nsuttrial.ui.CalendarScreen
 import com.nsutrack.nsuttrial.ui.ExamsScreen
+import com.nsutrack.nsuttrial.ui.IMSNoticesScreen
 import com.nsutrack.nsuttrial.ui.NoticesScreen
 
 fun NavGraphBuilder.mainGraph(navController: NavController, viewModel: AttendanceViewModel) {
@@ -48,7 +49,7 @@ fun NavGraphBuilder.mainGraph(navController: NavController, viewModel: Attendanc
     }
 
     composable(Screen.Notices.route) {
-        NoticesScreen(viewModel = viewModel)
+        IMSNoticesScreen(viewModel = viewModel)
     }
 
     // Keep this for backward compatibility

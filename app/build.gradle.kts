@@ -134,5 +134,6 @@ dependencies {
     implementation("androidx.compose.runtime:runtime-rxjava2")
     implementation("androidx.activity:activity:1.8.0")
     implementation("androidx.activity:activity-compose:1.7.2")
+    implementation("org.jsoup:jsoup:1.15.3")
 
 }

@@ -667,7 +667,7 @@ fun MonthSection(
                         imageVector = Icons.Default.KeyboardArrowDown,
                         contentDescription = if (isExpanded) "Collapse" else "Expand",
                         modifier = Modifier
-                            .padding(start = 12.dp)
+                            .padding(start = 14.dp)
                             .rotate(rotation),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )

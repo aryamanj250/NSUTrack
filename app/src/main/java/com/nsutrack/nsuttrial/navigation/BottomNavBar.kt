@@ -40,7 +40,7 @@ fun BottomNavBar(navController: NavController) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 5.dp, vertical = 0.dp),
+                .padding(horizontal = 8.dp, vertical = 0.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.Top
         ) {
@@ -56,7 +56,7 @@ fun BottomNavBar(navController: NavController) {
                 val iconColor = if (selected) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 }
 
                 Column(
@@ -78,7 +78,7 @@ fun BottomNavBar(navController: NavController) {
                             }
                         }
                         // Reduced the top padding to move content up further
-                        .padding(top = 2.dp)
+                        .padding(top = 5.dp)
                 ) {
                     // Selected indicator - positioned higher
                     if (selected) {
