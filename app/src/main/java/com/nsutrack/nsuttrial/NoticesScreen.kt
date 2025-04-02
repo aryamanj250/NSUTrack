@@ -10,7 +10,7 @@ import com.nsutrack.nsuttrial.AttendanceViewModel
 import com.nsutrack.nsuttrial.EnhancedTopAppBar
 import com.nsutrack.nsuttrial.HapticFeedback
 import com.nsutrack.nsuttrial.IMSNotificationsViewModel
-import com.nsutrack.nsuttrial.NoticesView
+import com.nsutrack.nsuttrial.IMSNoticesView  // Changed this import
 
 @Composable
 fun IMSNoticesScreen(viewModel: AttendanceViewModel) {
@@ -42,8 +42,8 @@ fun IMSNoticesScreen(viewModel: AttendanceViewModel) {
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Use the NoticesView composable from IMSNotificationsView.kt
-            NoticesView(imsViewModel)
+            // Use the IMSNoticesView composable instead of NoticesView
+            IMSNoticesView(imsViewModel)
         }
     }
 }

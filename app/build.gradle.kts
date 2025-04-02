@@ -135,5 +135,7 @@ dependencies {
     implementation("androidx.activity:activity:1.8.0")
     implementation("androidx.activity:activity-compose:1.7.2")
     implementation("org.jsoup:jsoup:1.15.3")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
 }

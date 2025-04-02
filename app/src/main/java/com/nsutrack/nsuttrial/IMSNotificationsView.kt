@@ -1,8 +1,8 @@
 package com.nsutrack.nsuttrial
 
+import android.content.Context
+import android.content.Intent
 import android.util.Log
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,8 +11,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -20,7 +20,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,23 +29,18 @@ import org.jsoup.Jsoup
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
+import android.widget.Toast
 
-/**
- * Data class for IMS notifications
- */
+// Data class remains the same
 data class IMSNotification(
     val date: String,
     val title: String,
     val link: String,
-    val publishedBy: String,
-    val department: String
+    val detailText: String
 )
 
-/**
- * ViewModel for managing IMS notifications
- */
+// ViewModel Updated: Removed DocumentHelper dependency
 class IMSNotificationsViewModel : ViewModel() {
-
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -65,6 +59,11 @@ class IMSNotificationsViewModel : ViewModel() {
     private val _filteredNotifications = MutableStateFlow<List<IMSNotification>>(emptyList())
     val filteredNotifications: StateFlow<List<IMSNotification>> = _filteredNotifications.asStateFlow()
 
+    private val baseURL = "https://www.imsnsit.org/imsnsit/"
+    // DocumentHelper removed
+
+    // initializeDocumentHelper function removed
+
     fun fetchNotifications() {
         viewModelScope.launch {
             _isLoading.value = true
@@ -78,11 +77,11 @@ class IMSNotificationsViewModel : ViewModel() {
                 _notifications.value = result.first
                 _departments.value = result.second
 
-                // Set default department and filter
                 if (_departments.value.isNotEmpty() && _selectedDepartment.value == null) {
-                    _selectedDepartment.value = "All"
-                    updateFilteredNotifications()
+                    _selectedDepartment.value = "All" // Default to "All"
                 }
+                // Initial filtering after fetch
+                updateFilteredNotifications()
 
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to load notifications: ${e.localizedMessage}"
@@ -94,171 +93,142 @@ class IMSNotificationsViewModel : ViewModel() {
     }
 
     fun setSelectedDepartment(department: String) {
-        viewModelScope.launch {
-            _selectedDepartment.value = department
-            updateFilteredNotifications()
-        }
+        // No need for viewModelScope here if just updating state for filtering
+        _selectedDepartment.value = department
+        updateFilteredNotifications()
     }
 
     private fun updateFilteredNotifications() {
         val department = _selectedDepartment.value
         val allNotifications = _notifications.value
 
-        _filteredNotifications.value = if (department == "All") {
+        _filteredNotifications.value = if (department == null || department == "All") {
             allNotifications
         } else {
-            allNotifications.filter { it.department == department }
+            allNotifications.filter { notification ->
+                notification.detailText.contains("Department: $department", ignoreCase = true)
+            }
         }
     }
 
-    /**
-     * Scrape notifications from the IMS website
-     * Returns a pair of (list of notifications, list of departments)
-     */
     private suspend fun scrapeNotifications(): Pair<List<IMSNotification>, List<String>> = withContext(Dispatchers.IO) {
-        val baseUrl = "https://www.imsnsit.org/imsnsit/"
         val notifications = mutableListOf<IMSNotification>()
         val departments = mutableSetOf<String>()
 
         try {
-            // Create a session with custom user agent and headers
-            val connection = Jsoup.connect("${baseUrl}notifications.php")
+            val document = Jsoup.connect("${baseURL}notifications.php")
                 .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.119 Safari/537.36")
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-                .header("Accept-Language", "en-US,en;q=0.5")
-                .header("Connection", "keep-alive")
-                .header("Upgrade-Insecure-Requests", "1")
-                .header("Sec-Fetch-Dest", "document")
-                .header("Sec-Fetch-Mode", "navigate")
-                .header("Sec-Fetch-Site", "none")
-                .header("Sec-Fetch-User", "?1")
-                .followRedirects(true)
-                .cookies(mutableMapOf()) // This will store cookies between requests
+                .timeout(30000)
+                .get()
 
-            val document = connection.get()
-
-            // Extract departments from the select dropdown
-            val departmentOptions = document.selectXpath("/html/body/form/table/tbody/tr[2]/td/div/select/option")
-            departmentOptions.forEach { option ->
-                departments.add(option.text())
-            }
-
-            // Add "All" option for showing all departments
-            departments.add("All")
-
-            // Extract notifications
             val tbody = document.selectXpath("/html/body/form/table/tbody").first()
+
             if (tbody != null) {
-                // Get all rows
-                val rows = tbody.select("tr")
-
-                // Skip header rows and process notification rows
-                // Starting from the 4th row (index 3), then every other row
-                var i = 3
-                while (i < rows.size - 4) { // Stopping at 4th from bottom
-                    val row = rows[i]
-                    val columns = row.select("td")
-
-                    if (columns.size >= 2) {
-                        // Extract date from first column
-                        val dateColumn = columns[0]
-                        val dateText = dateColumn.select("font").text().trim()
-
-                        // Extract notification details from second column
-                        val detailsColumn = columns[1]
-                        val anchor = detailsColumn.select("a").first()
-                        val detailFont = detailsColumn.select("font").first()
-
-                        if (anchor != null && detailFont != null) {
-                            val title = anchor.text().trim()
-                            var link = anchor.attr("href").trim()
-
-                            // Make link absolute if it's relative
-                            if (!link.startsWith("http")) {
-                                link = baseUrl + link
-                            }
-
-                            // Extract published by and department info
-                            val detailText = detailFont.text().trim()
-                            val publishedBy = extractPublishedBy(detailText)
-                            val department = extractDepartment(detailText)
-
-                            notifications.add(
-                                IMSNotification(
-                                    date = dateText,
-                                    title = title,
-                                    link = link,
-                                    publishedBy = publishedBy,
-                                    department = department
-                                )
-                            )
-                        }
+                val departmentOptions = tbody.selectXpath("tr[2]/td/div/select/option")
+                departments.add("All") // Add "All" explicitly first
+                for (option in departmentOptions) {
+                    val deptName = option.text().trim()
+                    if (deptName.isNotEmpty()) {
+                        departments.add(deptName)
                     }
+                }
 
-                    i += 2 // Skip every other row
+                val rows = tbody.select("tr")
+                var i = 3
+                while (i < rows.size - 4) {
+                    try {
+                        val row = rows[i]
+                        val columns = row.select("td")
+                        if (columns.size >= 2) {
+                            val dateText = columns[0].select("font").first()?.text()?.trim() ?: ""
+                            val detailsColumn = columns[1]
+                            val anchor = detailsColumn.select("a").first()
+                            if (anchor != null) {
+                                val title = anchor.text().trim()
+                                var link = anchor.attr("href").trim()
+                                if (!link.startsWith("http")) {
+                                    link = baseURL + link
+                                }
+                                val detailText = detailsColumn.selectXpath("./font").first()?.text()?.trim() ?: ""
+                                if (title.isNotEmpty()) {
+                                    notifications.add(
+                                        IMSNotification(
+                                            date = dateText,
+                                            title = title,
+                                            link = link,
+                                            detailText = detailText
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("IMSNotificationsVM", "Error processing row at index $i: ${e.message}")
+                    }
+                    i += 2
                 }
             }
-
         } catch (e: IOException) {
             Log.e("IMSNotificationsVM", "Error scraping notifications", e)
             throw e
         }
 
-        // Sort notifications by date (most recent first)
         val sortedNotifications = notifications.sortedByDescending {
             parseNotificationDate(it.date)
         }
 
-        // Return notifications and departments
-        Pair(sortedNotifications, departments.toList().sorted())
+        // Return sorted notifications and sorted departments (with "All" likely first)
+        Pair(sortedNotifications, departments.toList().sortedWith(compareBy { it != "All" })) // Keep "All" first
     }
 
-    /**
-     * Extract the published by information from the detail text
-     */
-    private fun extractPublishedBy(detailText: String): String {
-        val publishedByPattern = "Published By:\\s*(.+?)(?:\\s*Department:.*|$)".toRegex()
-        val matchResult = publishedByPattern.find(detailText)
-        return matchResult?.groupValues?.get(1)?.trim() ?: "Unknown"
-    }
-
-    /**
-     * Extract the department information from the detail text
-     */
-    private fun extractDepartment(detailText: String): String {
-        val departmentPattern = "Department:\\s*(.+)$".toRegex()
-        val matchResult = departmentPattern.find(detailText)
-        return matchResult?.groupValues?.get(1)?.trim() ?: "General"
-    }
-
-    /**
-     * Parse date string to Date object for sorting
-     */
     private fun parseNotificationDate(dateStr: String): Date {
         return try {
             val dateFormat = SimpleDateFormat("dd-MMM-yyyy", Locale.US)
             dateFormat.parse(dateStr) ?: Date(0)
         } catch (e: Exception) {
-            Date(0) // Default to epoch if parsing fails
+            Date(0)
+        }
+    }
+
+    /**
+     * Open a link using the WebViewActivity, which will handle session cookies.
+     * No special handling needed anymore.
+     */
+    fun openLink(link: String, context: Context, title: String = "Notice Details") {
+        try {
+            Log.d("IMSNotificationsVM", "Opening link in WebView: $link")
+            val intent = Intent(context, WebViewActivity::class.java).apply {
+                putExtra(WebViewActivity.EXTRA_URL, link)
+                putExtra(WebViewActivity.EXTRA_TITLE, title) // Pass title
+                // Use FLAG_ACTIVITY_NEW_TASK if calling from a non-Activity context like ViewModel
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            _errorMessage.value = "Failed to open link: ${e.localizedMessage}"
+            Log.e("IMSNotificationsVM", "Error creating intent for WebViewActivity", e)
+            // Optionally show a toast for immediate feedback
+            Toast.makeText(context, "Could not open link.", Toast.LENGTH_SHORT).show()
         }
     }
 }
 
-/**
- * Composable for displaying IMS notifications
- */
+// Composable Updated: Removed DocumentHelper initialization
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
+fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
     val isLoading by viewModel.isLoading.collectAsState()
     val departments by viewModel.departments.collectAsState()
     val selectedDepartment by viewModel.selectedDepartment.collectAsState()
     val filteredNotifications by viewModel.filteredNotifications.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
-    val uriHandler = LocalUriHandler.current
-    val hapticFeedback = HapticFeedback.getHapticFeedback()
+    val context = LocalContext.current
 
-    // Fetch notifications when the screen is first displayed
+    // DocumentHelper initialization removed
+    // LaunchedEffect(key1 = Unit) {
+    //     viewModel.initializeDocumentHelper(context)
+    // }
+
     LaunchedEffect(key1 = Unit) {
         viewModel.fetchNotifications()
     }
@@ -268,14 +238,6 @@ fun NoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Header
-        Text(
-            text = "IMS Notifications",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
         // Department filter dropdown
         if (departments.isNotEmpty()) {
             var expanded by remember { mutableStateOf(false) }
@@ -291,7 +253,7 @@ fun NoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
                     value = selectedDepartment ?: "All",
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Department") },
+                    label = { Text("Filter by Department") }, // More descriptive label
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                     modifier = Modifier
                         .menuAnchor()
@@ -308,7 +270,6 @@ fun NoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
                             onClick = {
                                 viewModel.setSelectedDepartment(department)
                                 expanded = false
-                                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
                             }
                         )
                     }
@@ -316,7 +277,7 @@ fun NoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
             }
         }
 
-        // Error message
+        // Error message card
         errorMessage?.let {
             Card(
                 colors = CardDefaults.cardColors(
@@ -326,22 +287,26 @@ fun NoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
             ) {
-                Text(
-                    text = it,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(16.dp)
-                )
-
-                Button(
-                    onClick = {
-                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                        viewModel.fetchNotifications()
-                    },
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .align(Alignment.End)
-                ) {
-                    Text("Retry")
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Error loading notices:", // Prefix error message
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = { viewModel.fetchNotifications() },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Retry")
+                    }
                 }
             }
         }
@@ -351,7 +316,7 @@ fun NoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(32.dp),
+                    .padding(vertical = 32.dp), // Add vertical padding
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator()
@@ -359,122 +324,65 @@ fun NoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
         }
 
         // Notifications list
-        if (filteredNotifications.isNotEmpty()) {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(filteredNotifications) { notification ->
-                    NotificationCard(
-                        notification = notification,
-                        onClick = {
-                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                            uriHandler.openUri(notification.link)
+        if (!isLoading && errorMessage == null) { // Only show list/empty state when not loading and no error
+            if (filteredNotifications.isNotEmpty()) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize() // Use remaining space
+                ) {
+                    items(filteredNotifications, key = { it.link }) { notification -> // Add a key for better performance
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    // Pass notification title to WebViewActivity
+                                    viewModel.openLink(notification.link, context, notification.title)
+                                }
+                                .padding(vertical = 2.dp) // Small vertical padding between cards
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Text(
+                                    text = notification.date,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.Gray, // Consider MaterialTheme.colorScheme.outline
+                                    modifier = Modifier.padding(bottom = 6.dp) // Adjusted padding
+                                )
+                                Text(
+                                    text = notification.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                )
+                                Text(
+                                    text = notification.detailText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
+                    }
+                }
+            } else {
+                // Empty state (when not loading and no notifications match filter)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize(), // Take remaining space
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (selectedDepartment == "All" || selectedDepartment == null)
+                            "No notifications found."
+                        else
+                            "No notifications found for ${selectedDepartment}.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-        } else if (!isLoading && errorMessage == null) {
-            // Empty state
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (selectedDepartment == "All")
-                        "No notifications available"
-                    else
-                        "No notifications for $selectedDepartment department",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-/**
- * Card for displaying a single notification
- */
-@Composable
-fun NotificationCard(notification: IMSNotification, onClick: () -> Unit) {
-    val hapticFeedback = HapticFeedback.getHapticFeedback()
-    var isPressed by remember { mutableStateOf(false) }
-
-    val cardScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = spring(),
-        label = "Card Scale"
-    )
-
-    // This LaunchedEffect will observe the isPressed state
-    LaunchedEffect(isPressed) {
-        if (isPressed) {
-            delay(100)
-            isPressed = false
-            onClick()
-        }
-    }
-
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                isPressed = true
-                // Don't call LaunchedEffect here, it's moved outside
-            }
-            .padding(vertical = 2.dp)
-            .graphicsLayer {
-                scaleX = cardScale
-                scaleY = cardScale
-            },
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 2.dp
-        )
-    ) {
-        // Rest of your card content remains the same
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            // Date and department chip
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = notification.date,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                SuggestionChip(
-                    onClick = { /* No action needed */ },
-                    label = { Text(notification.department) }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Title
-            Text(
-                text = notification.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Published by
-            Text(
-                text = "Published by: ${notification.publishedBy}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
