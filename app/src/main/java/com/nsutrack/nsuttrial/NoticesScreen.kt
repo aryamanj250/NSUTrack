@@ -20,9 +20,6 @@ fun IMSNoticesScreen(viewModel: AttendanceViewModel) {
             // Use EnhancedTopAppBar with null profileData to hide profile icon
             EnhancedTopAppBar(
                 title = "Notices",
-                profileData = null, // This will effectively hide the profile icon
-                onProfileClick = { }, // Empty lambda to maintain method signature
-                hapticFeedback = hapticFeedback
             )
         }
     ) { paddingValues ->
