@@ -1,6 +1,5 @@
 package com.nsutrack.nsuttrial.navigation
 
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
@@ -13,8 +12,7 @@ import com.nsutrack.nsuttrial.LoginScreen
 import com.nsutrack.nsuttrial.HomeScreen
 import com.nsutrack.nsuttrial.ui.CalendarScreen
 import com.nsutrack.nsuttrial.ui.ExamsScreen
-import com.nsutrack.nsuttrial.ui.IMSNoticesScreen
-import com.nsutrack.nsuttrial.ui.NoticesScreen
+import com.nsutrack.nsuttrial.IMSNoticesScreen
 
 fun NavGraphBuilder.mainGraph(navController: NavController, viewModel: AttendanceViewModel) {
     composable(Screen.Login.route) {

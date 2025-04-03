@@ -81,6 +81,7 @@ dependencies {
     // Accompanist libraries for enhanced Compose features
     implementation ("com.google.accompanist:accompanist-swiperefresh:0.30.1")
     implementation ("com.google.accompanist:accompanist-systemuicontroller:0.25.1")
+    implementation(libs.material)
 
     // Testing
     testImplementation ("junit:junit:4.13.2")
