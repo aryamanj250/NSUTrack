@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <!-- Original app-specific paths -->
-    <external-path name="external_files" path="Android/data/com.nsutrack.nsuttrial/files/Download"/>
-    <external-cache-path name="cache_files" path="."/>
-    <cache-path name="internal_cache" path="."/>
-    <files-path name="internal_files" path="."/>
-
-    <!-- Additional paths needed for Downloads access -->
-    <external-path name="downloads" path="Download/"/>
-    <external-path name="external_storage_root" path="."/>
+    <cache-path name="cache" path="." />
+    <external-files-path name="external_files" path="." />
+    <external-path name="external" path="." />
 </paths>

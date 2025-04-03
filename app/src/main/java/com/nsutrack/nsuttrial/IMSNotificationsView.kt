@@ -39,7 +39,7 @@ data class IMSNotification(
     val detailText: String
 )
 
-// ViewModel Updated: Removed DocumentHelper dependency
+// ViewModel Updated: Added proper title case formatting for departments
 class IMSNotificationsViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -60,9 +60,6 @@ class IMSNotificationsViewModel : ViewModel() {
     val filteredNotifications: StateFlow<List<IMSNotification>> = _filteredNotifications.asStateFlow()
 
     private val baseURL = "https://www.imsnsit.org/imsnsit/"
-    // DocumentHelper removed
-
-    // initializeDocumentHelper function removed
 
     fun fetchNotifications() {
         viewModelScope.launch {
@@ -93,7 +90,6 @@ class IMSNotificationsViewModel : ViewModel() {
     }
 
     fun setSelectedDepartment(department: String) {
-        // No need for viewModelScope here if just updating state for filtering
         _selectedDepartment.value = department
         updateFilteredNotifications()
     }
@@ -106,7 +102,7 @@ class IMSNotificationsViewModel : ViewModel() {
             allNotifications
         } else {
             allNotifications.filter { notification ->
-                notification.detailText.contains("Department: $department", ignoreCase = true)
+                notification.detailText.contains(department, ignoreCase = true)
             }
         }
     }
@@ -114,6 +110,9 @@ class IMSNotificationsViewModel : ViewModel() {
     private suspend fun scrapeNotifications(): Pair<List<IMSNotification>, List<String>> = withContext(Dispatchers.IO) {
         val notifications = mutableListOf<IMSNotification>()
         val departments = mutableSetOf<String>()
+
+        // List of words that should stay lowercase
+        val lowercaseExceptions = listOf("and", "for", "of", "to")
 
         try {
             val document = Jsoup.connect("${baseURL}notifications.php")
@@ -126,10 +125,24 @@ class IMSNotificationsViewModel : ViewModel() {
             if (tbody != null) {
                 val departmentOptions = tbody.selectXpath("tr[2]/td/div/select/option")
                 departments.add("All") // Add "All" explicitly first
+
                 for (option in departmentOptions) {
-                    val deptName = option.text().trim()
-                    if (deptName.isNotEmpty()) {
-                        departments.add(deptName)
+                    val rawDeptName = option.text().trim()
+                    if (rawDeptName.isNotEmpty() && rawDeptName != "Select ...") {
+                        // Process department name with proper capitalization
+                        val capitalizedDeptName = rawDeptName
+                            .lowercase()
+                            .split(" ")
+                            .map { word ->
+                                if (lowercaseExceptions.contains(word.lowercase())) {
+                                    word.lowercase()
+                                } else {
+                                    word.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+                                }
+                            }
+                            .joinToString(" ")
+
+                        departments.add(capitalizedDeptName)
                     }
                 }
 
@@ -191,31 +204,15 @@ class IMSNotificationsViewModel : ViewModel() {
     }
 
     /**
-     * Open a link using the WebViewActivity, which will handle session cookies.
-     * No special handling needed anymore.
+     * Open a link using the WebViewActivity with proper handling for all link types.
      */
-    // Updated openLink method in IMSNotificationsViewModel.kt
     fun openLink(link: String, context: Context, title: String = "Notice Details") {
         try {
-            Log.d("IMSNotificationsVM", "Opening link in WebView: $link")
-
-            // Handle plum_url.php links differently
-            val finalUrl = if (link.contains("plum_url.php")) {
-                // For document URLs, we need to ensure we're using the correct base URL
-                if (!link.startsWith("http")) {
-                    "$baseURL$link"
-                } else {
-                    link
-                }
-            } else {
-                // For regular notification links
-                link
-            }
+            Log.d("IMSNotificationsVM", "Opening link: $link")
 
             val intent = Intent(context, WebViewActivity::class.java).apply {
-                putExtra(WebViewActivity.EXTRA_URL, finalUrl)
+                putExtra(WebViewActivity.EXTRA_URL, link)
                 putExtra(WebViewActivity.EXTRA_TITLE, title)
-                putExtra(WebViewActivity.EXTRA_REFERER, "$baseURL/notifications.php") // Add referer
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
@@ -227,7 +224,7 @@ class IMSNotificationsViewModel : ViewModel() {
     }
 }
 
-// Composable Updated: Removed DocumentHelper initialization
+// Composable remains the same
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
@@ -237,11 +234,6 @@ fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
     val filteredNotifications by viewModel.filteredNotifications.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val context = LocalContext.current
-
-    // DocumentHelper initialization removed
-    // LaunchedEffect(key1 = Unit) {
-    //     viewModel.initializeDocumentHelper(context)
-    // }
 
     LaunchedEffect(key1 = Unit) {
         viewModel.fetchNotifications()

@@ -4,8 +4,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
 
     <application
         android:allowBackup="true"
@@ -30,14 +28,14 @@
             </intent-filter>
         </activity>
 
-        <!-- Added WebViewActivity -->
+        <!-- Material 3 WebViewActivity -->
         <activity
-            android:name=".WebViewActivity"
+            android:name="com.nsutrack.nsuttrial.WebViewActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+            android:theme="@style/Theme.Material3.DayNight.NoActionBar"
+            android:configChanges="orientation|screenSize" />
 
-        <!-- Added FileProvider for document handling -->
+        <!-- FileProvider for sharing downloaded documents -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
