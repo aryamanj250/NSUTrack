@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlin.random.Random
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,20 +37,23 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.border
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import com.nsutrack.nsuttrial.ui.theme.getAttendanceAdvice
-import com.nsutrack.nsuttrial.ui.theme.getAttendanceStatusColor
 import com.nsutrack.nsuttrial.ui.theme.getReadableTextColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.*
 import kotlin.math.max
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -346,6 +350,7 @@ fun HomeScheduleSection(
     var todaySchedule by remember { mutableStateOf<List<Schedule>>(emptyList()) }
 
     // Process schedule data whenever timetableData, today or timeState changes
+// Update in HomeScheduleSection to process breaks
     LaunchedEffect(timetableData, today, timeState) {
         withContext(Dispatchers.Default) {
             try {
@@ -403,8 +408,12 @@ fun HomeScheduleSection(
                         }
 
                         // Merge schedules that should be combined
-                        todaySchedule = mergeSchedules(schedules).sortedBy { it.startTime }
-                        Log.d("ScheduleSection", "Final schedule count: ${todaySchedule.size}")
+                        val mergedSchedules = mergeSchedules(schedules).sortedBy { it.startTime }
+
+                        // Add breaks between classes
+                        todaySchedule = insertBreaksBetweenClasses(mergedSchedules)
+
+                        Log.d("ScheduleSection", "Final schedule count with breaks: ${todaySchedule.size}")
                         return@withContext
                     } else {
                         Log.d("ScheduleSection", "No schedules found for $today")
@@ -414,11 +423,11 @@ fun HomeScheduleSection(
                 }
 
                 // If we get here, we couldn't get the real schedule, so use the sample
-                todaySchedule = getSampleSchedule(Date())
+                todaySchedule = insertBreaksBetweenClasses(getSampleSchedule(Date()))
             } catch (e: Exception) {
                 Log.e("ScheduleSection", "Error processing schedule data: ${e.message}")
                 e.printStackTrace()
-                todaySchedule = getSampleSchedule(Date())
+                todaySchedule = insertBreaksBetweenClasses(getSampleSchedule(Date()))
             }
         }
     }
@@ -632,7 +641,13 @@ fun HomeScheduleCard(
     isCurrentClass: Boolean,
     animationScale: Float
 ) {
-    val textColor = getReadableTextColor(schedule.color)
+    val textColor = if (schedule.isBreak)
+        MaterialTheme.colorScheme.onSurfaceVariant
+    else
+        getReadableTextColor(schedule.color)
+
+    // For dashed border - get the outline color from the theme within the composable
+    val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
 
     // Add subtle pulsing animation for current class
     val pulseAnimation = rememberInfiniteTransition(label = "PulseAnimation")
@@ -646,139 +661,244 @@ fun HomeScheduleCard(
         label = "Pulse Alpha"
     )
 
-    // Add elevation for current class
-    val elevation = if (isCurrentClass) 6.dp else 3.dp
+    // Add elevation for current class (only for non-break cards)
+    val elevation = if (isCurrentClass && !schedule.isBreak) 6.dp else 2.dp
 
-    Box(
-        modifier = Modifier
-            .width((width * animationScale).dp)
-            .height((75 * animationScale).dp)
-            .graphicsLayer {
-                alpha = pulseAlpha
-            }
-            .shadow(
-                elevation = elevation,
-                shape = RoundedCornerShape(12.dp),
-                spotColor = schedule.color.copy(alpha = 0.7f)
-            )
-    ) {
-        Card(
+    if (schedule.isBreak) {
+        // Break card with dashed borders
+        Box(
             modifier = Modifier
-                .fillMaxSize(),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = schedule.color.copy(alpha = 0.95f)
-            )
+                .width((width * animationScale).dp)
+                .height((75 * animationScale).dp)
+                .clip(RoundedCornerShape(12.dp))
         ) {
-            // Add subtle gradient overlay for depth
-            Box(
+            // Use a simple dashed border with fixed values instead of theme colors
+            DashedBorder(
+                color = outlineColor,
+                shape = RoundedCornerShape(12.dp),
+                strokeWidth = 1.dp,
+                dashWidth = 8.dp,
+                dashGap = 4.dp,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Content
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.1f),
-                                Color.Transparent
-                            ),
-                            start = Offset(0f, 0f),
-                            end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                        )
-                    )
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(
+                // Break label
+                Text(
+                    text = schedule.subject,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = textColor,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1
+                )
+
+                // Time range
+                Text(
+                    text = schedule.timeRange,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = textColor.copy(alpha = 0.8f),
+                    maxLines = 1
+                )
+
+                // Duration
+                val durationMinutes = schedule.duration / 60
+                if (durationMinutes > 0) {
+                    Text(
+                        text = "$durationMinutes min",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = textColor.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        }
+    } else {
+        // Introduce a slight random variation for card colors to make them more visually interesting
+        // Use the card's ID as a seed for consistent variation
+        val seed = schedule.id.hashCode()
+        val random = Random(seed)
+
+        // Generate a slight hue variation
+        val hueShift = random.nextFloat() * 0.06f - 0.03f  // Small shift between -0.03 and +0.03
+        val saturationFactor = 0.85f + random.nextFloat() * 0.15f  // 0.85 to 1.0
+
+        // Apply the variation and reduce the opacity
+        val baseColor = schedule.color
+        val adjustedColor = baseColor.copy(
+            alpha = 0.75f  // Make the card more translucent
+        )
+
+        // Regular class card with updated styling
+        Box(
+            modifier = Modifier
+                .width((width * animationScale).dp)
+                .height((75 * animationScale).dp)
+                .graphicsLayer {
+                    alpha = pulseAlpha
+                }
+                .shadow(
+                    elevation = elevation,
+                    shape = RoundedCornerShape(12.dp),
+                    spotColor = adjustedColor.copy(alpha = 0.5f)  // Lighter shadow
+                )
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxSize(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = adjustedColor
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)  // Remove default elevation for flatter look
+            ) {
+                // Add subtle gradient overlay for depth
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.15f),  // Slightly more pronounced highlight
+                                    Color.Transparent
+                                ),
+                                start = Offset(0f, 0f),
+                                end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                            )
+                        )
                 ) {
-                    // Subject name
-                    Text(
-                        text = schedule.subject,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = textColor.copy(alpha = 0.95f),
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1
-                    )
-
-                    // Time range
-                    Text(
-                        text = schedule.timeRange,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = textColor.copy(alpha = 0.95f),
-                        maxLines = 1
-                    )
-
-                    // Room and group info
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
                     ) {
-                        // Room info
-                        if (schedule.room != null) {
-                            val roomText = if (schedule.room.contains(", ")) {
-                                val rooms = schedule.room.split(", ")
-                                if (rooms.size > 2) {
-                                    "${rooms[0]}, ${rooms[1]}..."
+                        // Subject name
+                        Text(
+                            text = schedule.subject,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = textColor,  // Full opacity for better readability
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+
+                        // Time range
+                        Text(
+                            text = schedule.timeRange,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = textColor.copy(alpha = 0.9f),
+                            maxLines = 1
+                        )
+
+                        // Room and group info
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Room info
+                            if (schedule.room != null) {
+                                val roomText = if (schedule.room.contains(", ")) {
+                                    val rooms = schedule.room.split(", ")
+                                    if (rooms.size > 2) {
+                                        "${rooms[0]}, ${rooms[1]}..."
+                                    } else {
+                                        schedule.room
+                                    }
                                 } else {
                                     schedule.room
                                 }
-                            } else {
-                                schedule.room
+
+                                Text(
+                                    text = roomText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = textColor.copy(alpha = 0.9f),
+                                    maxLines = 1
+                                )
                             }
 
-                            Text(
-                                text = roomText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = textColor.copy(alpha = 0.9f),
-                                maxLines = 1
-                            )
-                        }
+                            // Separator
+                            if (schedule.room != null && schedule.getFormattedGroups() != null) {
+                                Text(
+                                    text = "•",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = textColor.copy(alpha = 0.7f)
+                                )
+                            }
 
-                        // Separator
-                        if (schedule.room != null && schedule.getFormattedGroups() != null) {
-                            Text(
-                                text = "•",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = textColor.copy(alpha = 0.7f)
-                            )
-                        }
-
-                        // Group info using the method
-                        schedule.getFormattedGroups()?.let { groups ->
-                            Text(
-                                text = groups,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = textColor.copy(alpha = 0.9f),
-                                maxLines = 1
-                            )
+                            // Group info using the method
+                            schedule.getFormattedGroups()?.let { groups ->
+                                Text(
+                                    text = groups,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = textColor.copy(alpha = 0.9f),
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        // Add a small indicator for current class with animation
-        if (isCurrentClass) {
-            val indicatorScale by pulseAnimation.animateFloat(
-                initialValue = 1f,
-                targetValue = 1.2f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1000, easing = EaseInOutSine),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "Indicator Scale"
-            )
+            // Add a small indicator for current class with animation
+            if (isCurrentClass) {
+                val indicatorScale by pulseAnimation.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1.2f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1000, easing = EaseInOutSine),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "Indicator Scale"
+                )
 
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .scale(indicatorScale)
-                    .align(Alignment.TopEnd)
-                    .offset(x = (-6).dp, y = 6.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
-            )
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .scale(indicatorScale)
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-6).dp, y = 6.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+            }
         }
+    }
+}
+// Create a separate composable for the dashed border
+@Composable
+fun DashedBorder(
+    color: Color,
+    shape: RoundedCornerShape,
+    strokeWidth: Dp = 1.dp,
+    dashWidth: Dp = 8.dp,
+    dashGap: Dp = 4.dp,
+    modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+    val strokeWidthPx = with(density) { strokeWidth.toPx() }
+    val dashWidthPx = with(density) { dashWidth.toPx() }
+    val dashGapPx = with(density) { dashGap.toPx() }
+
+    Canvas(modifier = modifier) {
+        // Create a path effect for dashed lines
+        val pathEffect = PathEffect.dashPathEffect(
+            intervals = floatArrayOf(dashWidthPx, dashGapPx),
+            phase = 0f
+        )
+
+        // Draw a rounded rectangle directly instead of using outline.path
+        drawRoundRect(
+            color = color,
+            style = Stroke(
+                width = strokeWidthPx,
+                pathEffect = pathEffect
+            ),
+            cornerRadius = CornerRadius(12f, 12f)
+        )
     }
 }
 @Composable
@@ -1043,13 +1163,53 @@ private fun getSampleSchedule(baseDate: Date): List<Schedule> {
 }
 
 // Calculate width for schedule card based on duration
+// Calculate width for schedule card based on duration
 private fun calculateWidth(schedule: Schedule): Float {
     val baseWidth = 160f // Base width for a 1-hour class
-    val minWidth = 160f  // Minimum width for any class
+    val minWidth = if (schedule.isBreak) 100f else 160f  // Minimum width - smaller for breaks
 
     val durationInHours = schedule.duration / 3600f
 
-    return max(minWidth, baseWidth * durationInHours)
+    // For breaks, use a more compressed scale
+    val scaleFactor = if (schedule.isBreak) 0.7f else 1.0f
+
+    return max(minWidth, baseWidth * durationInHours * scaleFactor)
+}
+// Define this function at file level in HomeScreen.kt (outside of any composable function)
+private fun insertBreaksBetweenClasses(schedules: List<Schedule>): List<Schedule> {
+    if (schedules.isEmpty() || schedules.size == 1) return schedules
+
+    val sortedSchedules = schedules.sortedBy { it.startTime }
+    val result = mutableListOf<Schedule>()
+
+    for (i in 0 until sortedSchedules.size - 1) {
+        val currentClass = sortedSchedules[i]
+        val nextClass = sortedSchedules[i + 1]
+
+        // Add the current class
+        result.add(currentClass)
+
+        // Check if there's a gap between current class and next class
+        val gapInMinutes = (nextClass.startTime.time - currentClass.endTime.time) / (1000 * 60)
+
+        // Only add a break if there's a significant gap (>= 10 minutes)
+        if (gapInMinutes >= 10) {
+            result.add(
+                Schedule(
+                    subject = "Break",
+                    startTime = currentClass.endTime,
+                    endTime = nextClass.startTime,
+                    color = Color(0xFFE0E0E0), // Light grey
+                    isBreak = true // This requires updating the Schedule data class
+                )
+            )
+        }
+    }
+
+    // Add the last class
+    result.add(sortedSchedules.last())
+
+    return result
 }
 
 

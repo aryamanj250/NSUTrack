@@ -13,7 +13,8 @@ data class Schedule(
     val color: Color,
     val room: String? = null,
     val group: String? = null,
-    val groups: List<String> = emptyList() // New field for multiple groups
+    val groups: List<String> = emptyList(),
+    val isBreak: Boolean = false
 ) {
     // Get duration in seconds
     val duration: Long
@@ -43,6 +44,41 @@ data class Schedule(
     // Check if a given time is within this schedule's time range
     fun isCurrentTime(currentTime: Date): Boolean {
         return currentTime.time >= startTime.time && currentTime.time <= endTime.time
+    }
+    private fun insertBreaksBetweenClasses(schedules: List<Schedule>): List<Schedule> {
+        if (schedules.isEmpty() || schedules.size == 1) return schedules
+
+        val sortedSchedules = schedules.sortedBy { it.startTime }
+        val result = mutableListOf<Schedule>()
+
+        for (i in 0 until sortedSchedules.size - 1) {
+            val currentClass = sortedSchedules[i]
+            val nextClass = sortedSchedules[i + 1]
+
+            // Add the current class
+            result.add(currentClass)
+
+            // Check if there's a gap between current class and next class
+            val gapInMinutes = (nextClass.startTime.time - currentClass.endTime.time) / (1000 * 60)
+
+            // Only add a break if there's a significant gap (>= 10 minutes)
+            if (gapInMinutes >= 10) {
+                result.add(
+                    Schedule(
+                        subject = "Break",
+                        startTime = currentClass.endTime,
+                        endTime = nextClass.startTime,
+                        color = Color(0xFFE0E0E0), // Light grey
+                        isBreak = true // Add this field to Schedule data class
+                    )
+                )
+            }
+        }
+
+        // Add the last class
+        result.add(sortedSchedules.last())
+
+        return result
     }
 
     // Calculate how much of the schedule period has elapsed (0.0 to 1.0)
