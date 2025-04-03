@@ -1075,11 +1075,10 @@ private fun calculateRedLinePosition(currentTime: Date): Float {
 @Composable
 fun EnhancedTopAppBar(
     title: String,
-    profileData: ProfileData?,
-    onProfileClick: () -> Unit,
-    hapticFeedback: HapticFeedback.HapticHandler
+    profileData: ProfileData? = null,
+    onProfileClick: (() -> Unit)? = null,
+    hapticFeedback: HapticFeedback.HapticHandler? = null
 ) {
-
     var isLoaded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -1133,13 +1132,15 @@ fun EnhancedTopAppBar(
             )
 
             // Profile button with animation
-            ProfileButton(
-                profileData = profileData,
-                onClick = {
-                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                    onProfileClick()
-                }
-            )
+            if (profileData != null) {
+                ProfileButton(
+                    profileData = profileData,
+                    onClick = {
+                        hapticFeedback?.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                        onProfileClick?.invoke()
+                    }
+                )
+            }
         }
     }
 }
