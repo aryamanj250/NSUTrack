@@ -18,7 +18,7 @@ data class ApiSubject(
     val total_classes: Int,
 
     @SerializedName("present")
-    val present: Int,
+    val present : Int,
 
     @SerializedName("absent")
     val absent: Int,
