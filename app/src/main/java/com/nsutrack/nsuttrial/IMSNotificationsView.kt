@@ -194,20 +194,34 @@ class IMSNotificationsViewModel : ViewModel() {
      * Open a link using the WebViewActivity, which will handle session cookies.
      * No special handling needed anymore.
      */
+    // Updated openLink method in IMSNotificationsViewModel.kt
     fun openLink(link: String, context: Context, title: String = "Notice Details") {
         try {
             Log.d("IMSNotificationsVM", "Opening link in WebView: $link")
+
+            // Handle plum_url.php links differently
+            val finalUrl = if (link.contains("plum_url.php")) {
+                // For document URLs, we need to ensure we're using the correct base URL
+                if (!link.startsWith("http")) {
+                    "$baseURL$link"
+                } else {
+                    link
+                }
+            } else {
+                // For regular notification links
+                link
+            }
+
             val intent = Intent(context, WebViewActivity::class.java).apply {
-                putExtra(WebViewActivity.EXTRA_URL, link)
-                putExtra(WebViewActivity.EXTRA_TITLE, title) // Pass title
-                // Use FLAG_ACTIVITY_NEW_TASK if calling from a non-Activity context like ViewModel
+                putExtra(WebViewActivity.EXTRA_URL, finalUrl)
+                putExtra(WebViewActivity.EXTRA_TITLE, title)
+                putExtra(WebViewActivity.EXTRA_REFERER, "$baseURL/notifications.php") // Add referer
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
         } catch (e: Exception) {
             _errorMessage.value = "Failed to open link: ${e.localizedMessage}"
             Log.e("IMSNotificationsVM", "Error creating intent for WebViewActivity", e)
-            // Optionally show a toast for immediate feedback
             Toast.makeText(context, "Could not open link.", Toast.LENGTH_SHORT).show()
         }
     }
