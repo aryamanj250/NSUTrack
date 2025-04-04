@@ -1,15 +1,20 @@
 package com.nsutrack.nsuttrial.navigation
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -18,6 +23,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.nsutrack.nsuttrial.HapticFeedback
+import kotlin.math.roundToInt
 
 @Composable
 fun BottomNavBar(navController: NavController) {
@@ -26,101 +32,83 @@ fun BottomNavBar(navController: NavController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    // Transparent background with blur effect
-    Box(
+    // Apply a surface with rounded top corners and proper height
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(84.dp)
+            .navigationBarsPadding(), // This handles the navigation bar area properly
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp,
+        shape = RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp)
     ) {
-        // Blurred background
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .blur(radius = 80.dp)
-                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f))
-        )
-
-        // Top divider line
-        Divider(
+        NavigationBar(
+            containerColor = Color.Transparent, // Keep transparent to let the Surface color show
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 0.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.TopCenter),
-            thickness = 0.5.dp,
-            color = Color.Gray.copy(alpha = 0.3f)
-        )
-
-        // Navigation items
-        Row(
-            modifier = Modifier.fillMaxSize()
+                .height(80.dp) // Fixed height that looks good with navigation gestures
         ) {
             screens.forEach { screen ->
-                val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
+                val selected = currentDestination?.hierarchy?.any {
+                    it.route == screen.route
+                } == true
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable(
-                            onClick = {
-                                if (!selected) {
-                                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                                    navController.navigate(screen.route) {
-                                        popUpTo(navController.graph.startDestinationId) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
+                val labelWeight by animateFloatAsState(
+                    targetValue = if (selected) FontWeight.SemiBold.weight.toFloat() else FontWeight.Normal.weight.toFloat(),
+                    animationSpec = tween(200),
+                    label = "NavLabelWeight"
+                )
+
+                val iconColor by animateColorAsState(
+                    targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    animationSpec = tween(200),
+                    label = "NavIconColor"
+                )
+
+                val textColor by animateColorAsState(
+                    targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    animationSpec = tween(200),
+                    label = "NavTextColor"
+                )
+
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = {
+                        if (!selected) {
+                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                            navController.navigate(screen.route) {
+                                popUpTo(navController.graph.startDestinationId) {
+                                    saveState = true
                                 }
-                            },
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Item content
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    ) {
-                        val color = if (selected)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    },
+                    icon = {
                         Icon(
                             imageVector = screen.icon,
                             contentDescription = screen.title,
-                            tint = color,
                             modifier = Modifier.size(24.dp)
                         )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
+                    },
+                    label = {
                         Text(
                             text = screen.title,
-                            color = color,
                             style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                            fontWeight = FontWeight(labelWeight.roundToInt())
                         )
-
-                        // Show indicator if selected
-                        if (selected) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Box(
-                                modifier = Modifier
-                                    .width(32.dp)
-                                    .height(3.dp)
-                                    .clip(RoundedCornerShape(1.5.dp))
-                                    .background(color = MaterialTheme.colorScheme.primary)
-                            )
-                        } else {
-                            // Empty spacer to maintain consistent height
-                            Spacer(modifier = Modifier.height(7.dp))
-                        }
-                    }
-                }
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                        indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        unselectedIconColor = iconColor,
+                        unselectedTextColor = textColor
+                    )
+                )
             }
         }
     }
