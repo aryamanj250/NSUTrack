@@ -140,149 +140,147 @@ fun HomeScreen(
                 enter = fadeIn(animationSpec = tween(500)) +
                         slideInVertically(animationSpec = tween(500)) { it / 5 }
             ) {
+                // CRITICAL FIX: Replace PullStretchEffect with direct LazyColumn
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = rememberLazyListState(),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 16.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        // Schedule Section
+                        HomeScheduleSection(viewModel = viewModel, hapticFeedback = hapticFeedback)
+                    }
 
-                PullStretchEffect {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        state = rememberLazyListState(),
-                        contentPadding = PaddingValues(
-                            start = 16.dp,
-                            end = 16.dp,
-                            top = 8.dp,
-                            bottom = 16.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
+                    // Error message display
+                    if (errorMessage.isNotEmpty()) {
                         item {
-                            // Schedule Section
-                            HomeScheduleSection(viewModel = viewModel, hapticFeedback = hapticFeedback)
+                            Modifier
+                                .fillMaxWidth()
+                            ElevatedCard(
+                                modifier = Modifier.animateItem(
+                                    fadeInSpec = null,
+                                    fadeOutSpec = null,
+                                    placementSpec = spring(
+                                        stiffness = Spring.StiffnessMediumLow,
+                                        visibilityThreshold = IntOffset.VisibilityThreshold
+                                    )
+                                ),
+                                colors = CardDefaults.elevatedCardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer
+                                ),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Text(
+                                    text = errorMessage,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
                         }
+                    }
 
-                        // Error message display
-                        if (errorMessage.isNotEmpty()) {
+                    item {
+                        // Section Header for Attendance
+                        Text(
+                            text = stringResource(R.string.attendance),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+
+                    // Attendance Section
+                    when {
+                        isLoading && subjectData.isEmpty() -> {
                             item {
-                                Modifier
-                                    .fillMaxWidth()
-                                ElevatedCard(
-                                    modifier = Modifier.animateItem(
-                                        fadeInSpec = null,
-                                        fadeOutSpec = null,
-                                        placementSpec = spring(
-                                            stiffness = Spring.StiffnessMediumLow,
-                                            visibilityThreshold = IntOffset.VisibilityThreshold
-                                        )
-                                    ),
-                                    colors = CardDefaults.elevatedCardColors(
-                                        containerColor = MaterialTheme.colorScheme.errorContainer
-                                    ),
-                                    shape = RoundedCornerShape(16.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = errorMessage,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                        modifier = Modifier.padding(16.dp)
+                                    CircularProgressIndicator(
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(40.dp),
+                                        strokeWidth = 4.dp
                                     )
                                 }
                             }
                         }
-
-                        item {
-                            // Section Header for Attendance
-                            Text(
-                                text = stringResource(R.string.attendance),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
-
-                        // Attendance Section
-                        when {
-                            isLoading && subjectData.isEmpty() -> {
-                                item {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(200.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        CircularProgressIndicator(
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(40.dp),
-                                            strokeWidth = 4.dp
+                        subjectData.isEmpty() -> {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                            text = stringResource(R.string.no_attendance_data),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodyLarge
                                         )
-                                    }
-                                }
-                            }
-                            subjectData.isEmpty() -> {
-                                item {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(200.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+                                        if (errorMessage.isNotEmpty()) {
+                                            Spacer(modifier = Modifier.height(8.dp))
                                             Text(
-                                                text = stringResource(R.string.no_attendance_data),
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                style = MaterialTheme.typography.bodyLarge
+                                                text = errorMessage,
+                                                color = MaterialTheme.colorScheme.error,
+                                                style = MaterialTheme.typography.bodySmall
                                             )
+                                        }
 
-                                            if (errorMessage.isNotEmpty()) {
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                                Text(
-                                                    text = errorMessage,
-                                                    color = MaterialTheme.colorScheme.error,
-                                                    style = MaterialTheme.typography.bodySmall
-                                                )
-                                            }
+                                        Spacer(modifier = Modifier.height(16.dp))
 
-                                            Spacer(modifier = Modifier.height(16.dp))
-
-                                            Button(
-                                                onClick = {
-                                                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                                                    // Keep manual refresh button for empty state
-                                                    coroutineScope.launch {
-                                                        viewModel.refreshData()
-                                                    }
-                                                },
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = MaterialTheme.colorScheme.primary
-                                                ),
-                                                shape = RoundedCornerShape(24.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Refresh,
-                                                    contentDescription = "Refresh",
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(
-                                                    text = "Refresh",
-                                                    style = MaterialTheme.typography.labelLarge
-                                                )
-                                            }
+                                        Button(
+                                            onClick = {
+                                                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                                // Keep manual refresh button for empty state
+                                                coroutineScope.launch {
+                                                    viewModel.refreshData()
+                                                }
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.primary
+                                            ),
+                                            shape = RoundedCornerShape(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Refresh,
+                                                contentDescription = "Refresh",
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Refresh",
+                                                style = MaterialTheme.typography.labelLarge
+                                            )
                                         }
                                     }
                                 }
                             }
-                            else -> {
-                                items(
-                                    items = subjectData,
-                                    key = { it.code }
-                                ) { subject ->
-                                    AttendanceCard(
-                                        subject = subject,
-                                        viewModel = viewModel,
-                                        hapticFeedback = hapticFeedback,
-                                        modifier = Modifier.animateItemPlacement(
-                                            animationSpec = tween(300)
-                                        )
+                        }
+                        else -> {
+                            items(
+                                items = subjectData,
+                                key = { it.code }
+                            ) { subject ->
+                                AttendanceCard(
+                                    subject = subject,
+                                    viewModel = viewModel,
+                                    hapticFeedback = hapticFeedback,
+                                    modifier = Modifier.animateItemPlacement(
+                                        animationSpec = tween(300)
                                     )
-                                }
+                                )
                             }
                         }
                     }
@@ -312,7 +310,6 @@ fun HomeScreen(
         )
     }
 }
-
 // The rest of the file remains the same...
 @Composable
 fun HomeScheduleSection(

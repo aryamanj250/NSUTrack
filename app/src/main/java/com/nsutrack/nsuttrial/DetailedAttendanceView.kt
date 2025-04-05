@@ -39,6 +39,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import android.util.Log
 
 /**
  * Bottom sheet implementation for attendance details with fast, smooth animations
@@ -66,35 +67,77 @@ fun DetailedAttendanceView(
     val currentMonth = currentDateString.split("-")[0]
     val currentDay = currentDateString.split("-")[1].toIntOrNull() ?: 0
 
-    // Filter records
+    // Filter records - include ALL attendance types with meaningful status codes
     val filteredRecords = records.filter { record ->
-        val dateParts = record.date.split("-")
-        if (dateParts.size < 2) return@filter false
+        try {
+            // Any record with a valid date format should be included
+            val dateParts = record.date.split("-")
+            if (dateParts.size != 2) return@filter false
 
-        val month = dateParts[0]
-        val day = dateParts[1].toIntOrNull() ?: 0
+            // Try to parse the day as a number
+            val day = dateParts[1].toIntOrNull() ?: return@filter false
 
-        val isPastDate = if (month != currentMonth) {
-            true
-        } else {
-            day <= currentDay
+            // Accept any status that's not completely empty
+            return@filter record.status.isNotBlank()
+        } catch (e: Exception) {
+            false
+        }
+    }
+    // Map months to their numerical order for proper sorting
+    val monthOrder = mapOf(
+        "Jan" to 1, "Feb" to 2, "Mar" to 3, "Apr" to 4, "May" to 5, "Jun" to 6,
+        "Jul" to 7, "Aug" to 8, "Sep" to 9, "Oct" to 10, "Nov" to 11, "Dec" to 12
+    )
+
+    // Calculate current month/year
+    val calendar = Calendar.getInstance()
+    val currentYear = calendar.get(Calendar.YEAR)
+    val currentMonthNum = calendar.get(Calendar.MONTH) + 1 // Calendar months are 0-based
+
+    // Group and sort records by month
+    val groupedRecords = filteredRecords
+        .groupBy {
+            it.date.split("-").firstOrNull() ?: ""
+        }
+        .toList()
+        .sortedByDescending { (monthStr, _) ->
+            // Month in numerical form
+            val monthNum = monthOrder[monthStr] ?: 0
+
+            // Determine if this month is from current year or previous year
+            // For academic years that span calendar years (e.g., Aug-Jul)
+            val yearValue = if (monthNum > currentMonthNum) currentYear - 1 else currentYear
+
+            // Combine for sorting (yyyyMM format)
+            yearValue * 100 + monthNum
         }
 
-        val isActualClass = when (record.status) {
-            "0", "1", "0+0", "0+1", "1+0", "1+1" -> true
-            else -> false
-        }
+    // Log grouped records for debugging
+    LaunchedEffect(Unit) {
+        val monthsFound = groupedRecords.map { it.first }.joinToString(", ")
+        Log.d("AttendanceView", "Found months: $monthsFound")
+        Log.d("AttendanceView", "Current month: $currentMonth ($currentMonthNum)")
 
-        return@filter isPastDate && isActualClass
+        // Log all record details
+        filteredRecords.forEach {
+            Log.d("AttendanceView", "Record: ${it.date} - ${it.status}")
+        }
     }
 
-    // Group attendance records by month
-    val groupedRecords = filteredRecords.groupBy {
-        it.date.split("-").firstOrNull() ?: ""
-    }.toList().sortedByDescending { it.first }
-
-    // Keep track of expanded month sections
-    val expandedMonths = remember { mutableStateOf(setOf(groupedRecords.firstOrNull()?.first ?: "")) }
+    // Default to expanding current month
+    val expandedMonths = remember {
+        mutableStateOf(
+            if (groupedRecords.isNotEmpty()) {
+                if (groupedRecords.any { it.first == currentMonth }) {
+                    setOf(currentMonth)
+                } else {
+                    setOf(groupedRecords.first().first)
+                }
+            } else {
+                emptySet()
+            }
+        )
+    }
 
     // Define sheet states - use Int to avoid type issues
     val EXPANDED = 0
@@ -449,7 +492,8 @@ fun DetailedAttendanceView(
                                             top = 8.dp,
                                             // Critical: Extra bottom padding to ensure content fills past bottom nav
                                             bottom = 120.dp
-                                        )
+                                        ),
+                                        verticalArrangement = Arrangement.spacedBy(16.dp) // Spacing between items
                                     ) {
                                         item {
                                             AttendanceHeader(subject)
@@ -495,6 +539,85 @@ fun DetailedAttendanceView(
 }
 
 @Composable
+fun MonthSection(
+    month: String,
+    records: List<AttendanceRecord>,
+    isExpanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Month header
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 14.dp, horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = month,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${records.size} CLASSES",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Arrow animation
+                    val rotation by animateFloatAsState(
+                        targetValue = if (isExpanded) 180f else 0f,
+                        animationSpec = tween(200),
+                        label = "ArrowRotation"
+                    )
+
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        modifier = Modifier
+                            .padding(start = 14.dp)
+                            .rotate(rotation),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // Records with animation - simple list of all records
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically(tween(200)) + fadeIn(tween(200)),
+            exit = shrinkVertically(tween(150)) + fadeOut(tween(120))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Single list with all records, sorted by day (most recent days first)
+                records.forEach { record ->
+                    RecordRow(record)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun AttendanceHeader(subject: SubjectData) {
     Column(
         modifier = Modifier
@@ -527,6 +650,12 @@ fun AttendanceHeader(subject: SubjectData) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Text(
+                    text = "${subject.overallPresent}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF4CAF50)
+                )
                 Text(
                     text = "${subject.overallPresent}",
                     style = MaterialTheme.typography.titleMedium,
@@ -613,133 +742,6 @@ fun AttendanceHeader(subject: SubjectData) {
                 fontWeight = FontWeight.Medium,
                 style = MaterialTheme.typography.bodyLarge
             )
-        }
-    }
-}
-
-@Composable
-fun MonthSection(
-    month: String,
-    records: List<AttendanceRecord>,
-    isExpanded: Boolean,
-    onToggle: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // Month header
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onToggle),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 14.dp, horizontal = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = month,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "${records.size} CLASSES",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    // Arrow animation
-                    val rotation by animateFloatAsState(
-                        targetValue = if (isExpanded) 180f else 0f,
-                        animationSpec = tween(200),
-                        label = "ArrowRotation"
-                    )
-
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (isExpanded) "Collapse" else "Expand",
-                        modifier = Modifier
-                            .padding(start = 14.dp)
-                            .rotate(rotation),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        // Records with animation
-        AnimatedVisibility(
-            visible = isExpanded,
-            enter = expandVertically(tween(200)) + fadeIn(tween(200)),
-            exit = shrinkVertically(tween(150)) + fadeOut(tween(120))
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Group records
-                val normalRecords = records.filter {
-                    it.status == "0" || it.status == "1" ||
-                            it.status == "0+0" || it.status == "1+1" ||
-                            it.status == "0+1" || it.status == "1+0"
-                }
-
-                val holidayRecords = records.filter {
-                    it.status == "GH" || it.status == "H" || it.status == "CS" || it.status == "TL"
-                }
-
-                val specialRecords = records.filter {
-                    it.status == "MS" || it.status == "CR" ||
-                            (!normalRecords.contains(it) && !holidayRecords.contains(it))
-                }
-
-                // Display normal classes
-                if (normalRecords.isNotEmpty()) {
-                    normalRecords.forEach { record ->
-                        RecordRow(record)
-                    }
-                }
-
-                // Special cases
-                if (specialRecords.isNotEmpty()) {
-                    Text(
-                        text = "Special Sessions",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                    )
-
-                    specialRecords.forEach { record ->
-                        RecordRow(record)
-                    }
-                }
-
-                // Holidays
-                if (holidayRecords.isNotEmpty()) {
-                    Text(
-                        text = "Holidays & Cancellations",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                    )
-
-                    holidayRecords.forEach { record ->
-                        RecordRow(record)
-                    }
-                }
-            }
         }
     }
 }
@@ -977,7 +979,7 @@ fun AttendanceStatusView(status: String) {
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
         ) {
             Text(
-                text = "Mid Sem",
+                text = "Mid Semester",
                 color = Color(0xFFF57F17), // Dark Amber
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.bodyMedium,
@@ -993,6 +995,20 @@ fun AttendanceStatusView(status: String) {
             Text(
                 text = "Rescheduled",
                 color = Color(0xFF1565C0), // Dark Blue
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+        }
+
+        "MB" -> Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = Color(0xFFE1BEE7), // Light Purple
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+        ) {
+            Text(
+                text = "Mass Bunk",
+                color = Color(0xFF7B1FA2), // Dark Purple
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
