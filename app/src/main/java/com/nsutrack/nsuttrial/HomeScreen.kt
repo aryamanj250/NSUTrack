@@ -281,24 +281,22 @@ fun HomeScreen(
 } // End HomeScreen Composable
 
 // The rest of your HomeScheduleSection and related functions remain the same
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) // Make sure necessary OptIns are present at file/function level
 @Composable
 fun HomeScheduleSection(
     viewModel: AttendanceViewModel,
-    hapticFeedback: HapticFeedback.HapticHandler
+    hapticFeedback: HapticFeedback.HapticHandler // Assuming you still pass this
 ) {
     val timetableData by viewModel.timetableData.collectAsState()
     val isTimetableLoading by viewModel.isTimetableLoading.collectAsState()
     val timetableError by viewModel.timetableError.collectAsState()
 
-    // Force refresh of current time on recomposition
-    val currentTime by remember { mutableStateOf(Date()) }
+    // Force refresh of current time on recomposition (use a state for updates)
+    var timeState by remember { mutableStateOf(Date()) }
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // Force update time immediately upon composition
-    var timeState by remember { mutableStateOf(Date()) }
-
-    // Update time every 30 seconds
+    // Update time every 30 seconds (keep your timer logic)
     LaunchedEffect(Unit) {
         while (true) {
             timeState = Date() // Use fresh date
@@ -308,12 +306,12 @@ fun HomeScheduleSection(
 
     // Calculate today's day string
     val calendar = Calendar.getInstance()
-    calendar.time = Date()
+    calendar.time = timeState // Use the state for consistency
     val weekday = calendar.get(Calendar.DAY_OF_WEEK)
     val days = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
     val today = days[weekday - 1]
 
-    // Process schedule data
+    // Process schedule data state
     var todaySchedule by remember { mutableStateOf<List<Schedule>>(emptyList()) }
 
     // Process schedule data whenever timetableData, today or timeState changes
@@ -321,33 +319,27 @@ fun HomeScheduleSection(
         withContext(Dispatchers.Default) {
             try {
                 val data = timetableData
+                var processedSchedules: List<Schedule> = emptyList() // Default to empty
+
                 if (data != null) {
-                    // Log available days
                     val availableDays = data.schedule.keys.joinToString(", ")
                     Log.d("ScheduleSection", "Available schedule days: $availableDays")
-
-                    // Get today's class schedules
                     val todayClassSchedules = data.schedule[today]
 
                     if (todayClassSchedules != null && todayClassSchedules.isNotEmpty()) {
                         Log.d("ScheduleSection", "Found ${todayClassSchedules.size} classes for $today")
-
-                        // Process each class schedule
                         val schedules = todayClassSchedules.mapNotNull { classSchedule ->
                             try {
-                                // Parse class times
-                                val timePair = parseClassTimes(
+                                val timePair = parseClassTimes( // Ensure parseClassTimes is accessible
                                     classSchedule.startTime,
                                     classSchedule.endTime,
-                                    Date()
+                                    timeState // Pass the current time state
                                 ) ?: return@mapNotNull null
 
                                 val (startTime, endTime) = timePair
+                                val color = generateConsistentColor(classSchedule.subject) // Ensure generateConsistentColor is accessible
 
-                                // Generate a consistent color based on subject code
-                                val color = generateConsistentColor(classSchedule.subject)
-
-                                // Extract group numbers if they exist
+                                // Extract group numbers (your logic here)
                                 val groupInfo = classSchedule.group?.trim()
                                 val groupNumbers = groupInfo?.let {
                                     if (it.contains("Group", ignoreCase = true)) {
@@ -358,6 +350,7 @@ fun HomeScheduleSection(
                                     }
                                 } ?: emptyList()
 
+
                                 Schedule(
                                     subject = classSchedule.subjectName ?: classSchedule.subject,
                                     startTime = startTime,
@@ -365,84 +358,75 @@ fun HomeScheduleSection(
                                     color = color,
                                     room = classSchedule.room,
                                     group = groupInfo,
-                                    groups = groupNumbers
+                                    groups = groupNumbers // Pass extracted groups
                                 )
                             } catch (e: Exception) {
                                 Log.e("ScheduleSection", "Error processing class: ${e.message}")
                                 null
                             }
                         }
-
-                        // Merge schedules that should be combined
+                        // Merge schedules that should be combined (ensure mergeSchedules is accessible)
                         val mergedSchedules = mergeSchedules(schedules).sortedBy { it.startTime }
-
-                        // Add breaks between classes
-                        todaySchedule = insertBreaksBetweenClasses(mergedSchedules)
-
-                        Log.d("ScheduleSection", "Final schedule count with breaks: ${todaySchedule.size}")
-                        return@withContext
+                        // Add breaks between classes (ensure insertBreaksBetweenClasses is accessible)
+                        processedSchedules = insertBreaksBetweenClasses(mergedSchedules)
+                        Log.d("ScheduleSection", "Final schedule count with breaks: ${processedSchedules.size}")
                     } else {
                         Log.d("ScheduleSection", "No schedules found for $today")
+                        // processedSchedules remains emptyList()
                     }
                 } else {
                     Log.d("ScheduleSection", "Timetable data is null")
+                    // processedSchedules remains emptyList()
                 }
-
-                // If we get here, we couldn't get the real schedule, so use the sample
-                todaySchedule = insertBreaksBetweenClasses(getSampleSchedule(Date()))
+                // Update the state with the processed schedule (or empty list)
+                todaySchedule = processedSchedules
             } catch (e: Exception) {
                 Log.e("ScheduleSection", "Error processing schedule data: ${e.message}")
                 e.printStackTrace()
-                todaySchedule = insertBreaksBetweenClasses(getSampleSchedule(Date()))
+                // Ensure schedule is empty on error
+                todaySchedule = emptyList()
             }
         }
     }
 
-    // Improved auto-scrolling logic with delay
+    // Improved auto-scrolling logic with delay (Keep your logic)
     LaunchedEffect(todaySchedule, timeState) {
         if (todaySchedule.isNotEmpty()) {
-            // Make sure the LazyRow has composed
-            delay(300)
-
-            // Find current class (class happening right now)
-            val freshCurrentTime = Date() // Always use fresh time
+            delay(300) // Allow composition time
+            val freshCurrentTime = timeState // Use the updated state time
             val currentClass = todaySchedule.firstOrNull { it.isCurrentTime(freshCurrentTime) }
-
-            // If no current class, find the next upcoming class
             val nearestUpcoming = if (currentClass == null) {
                 todaySchedule.filter { it.startTime.after(freshCurrentTime) }
                     .minByOrNull { it.startTime.time - freshCurrentTime.time }
             } else null
 
-            // Use current class if available, otherwise use next upcoming class
             val targetClass = currentClass ?: nearestUpcoming
-
             if (targetClass != null) {
                 val index = todaySchedule.indexOf(targetClass)
                 if (index >= 0) {
-                    Log.d("AutoScroll", "Scrolling to ${if (currentClass != null) "current" else "upcoming"} class: ${targetClass.subject} at index $index")
-                    try {
-                        listState.animateScrollToItem(index)
-                    } catch (e: Exception) {
-                        Log.e("AutoScroll", "Error scrolling: ${e.message}")
-                    }
+                    Log.d("AutoScroll", "Scrolling to index $index")
+                    try { listState.animateScrollToItem(index) } catch (e: Exception) { /* log error */ }
                 }
             }
         }
     }
 
+    // --- UI ---
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp)
+            .padding(bottom = 8.dp) // Consistent bottom padding
     ) {
-        // Section header with icon
+        // Section header with icon and loading indicator
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(vertical = 12.dp)
+            modifier = Modifier
+                .padding(vertical = 12.dp) // Keep padding consistent
+            // Add horizontal padding if needed, e.g., .padding(horizontal = 16.dp, vertical = 12.dp)
+            // If horizontal padding is applied globally in LazyColumn, you might not need it here.
         ) {
             Text(
-                text = stringResource(R.string.schedule),
+                text = stringResource(R.string.schedule), // Use updated string if needed
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
@@ -458,99 +442,141 @@ fun HomeScheduleSection(
             }
         }
 
-        if (timetableError != null) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    text = timetableError ?: "",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-        } else if (todaySchedule.isEmpty()) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(95.dp),
-                shape = RoundedCornerShape(15.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(R.string.no_classes_today),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-        } else {
-            // FIXED: Increased the height to make schedule cards visible
-            Box(
-                modifier = Modifier
-                    .height(110.dp) // Increased from 90.dp
-                    .fillMaxWidth()
-            ) {
-                // Schedule cards in horizontal scrollable list
-                LazyRow(
-                    state = listState,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(vertical = 4.dp), // Added vertical padding
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(
-                        items = todaySchedule,
-                        key = { it.id }
-                    ) { schedule ->
-                        val isCurrentClass = schedule.isCurrentTime(Date()) // Fresh time check
-
-                        // Apply scaling animation to current class
-                        val scale by animateFloatAsState(
-                            targetValue = if (isCurrentClass) 1.05f else 1f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessLow
-                            ),
-                            label = "Class card scale"
-                        )
-
-                        HomeScheduleCard(
-                            schedule = schedule,
-                            width = calculateWidth(schedule),
-                            isCurrentClass = isCurrentClass,
-                            animationScale = scale
+        // Conditional Content Area with Crossfade
+        Crossfade(
+            targetState = Triple(isTimetableLoading, timetableError, todaySchedule.isEmpty()),
+            label = "ScheduleContentFade"
+        ) { (loading, error, isEmpty) ->
+            when {
+                // Show Error Card first if an error exists
+                error != null -> {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = error ?: stringResource(R.string.error_loading_schedule),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
 
-                // Red line indicator for current time
-                val redLinePosition = calculateRedLinePosition(Date()) // Fresh time
-                if (redLinePosition > 0) {
-                    RedLineIndicator(position = redLinePosition)
+                // Show Loading Placeholder while loading (and no error)
+                loading -> {
+                    Box(modifier = Modifier
+                        .fillMaxWidth()
+                        .height(95.dp) // Match the 'No classes' card height
+                        .clip(RoundedCornerShape(15.dp)) // Clip shape for consistency
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    ) {
+                        // Optional: Add a Shimmer effect here later
+                    }
                 }
-            }
-        }
-    }
 
-    // Force fetch timetable data when this component is first displayed
+                // Show "No Classes Today" Card if empty, not loading, and no error
+                isEmpty -> {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(95.dp)
+                            .animateContentSize(), // Animate size changes smoothly
+                        shape = RoundedCornerShape(15.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat look
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center // Center content vertically and horizontally
+                        ) {
+                            // Column to stack the two text lines
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally, // Center text within the column
+                                verticalArrangement = Arrangement.Center // Center vertically too
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.no_classes_today), // "No classes scheduled today! 🎉"
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    textAlign = TextAlign.Center,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(4.dp)) // Small space between lines
+                                Text(
+                                    text = stringResource(R.string.your_day_is_clear), // "Your day is clear"
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f), // Slightly less prominent
+                                    style = MaterialTheme.typography.bodyMedium, // Slightly smaller style
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Show the Schedule LazyRow if not loading, no error, and schedule is not empty
+                else -> {
+                    Box(
+                        modifier = Modifier
+                            .height(110.dp) // Your defined height for the schedule row
+                            .fillMaxWidth()
+                    ) {
+                        LazyRow(
+                            state = listState,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(vertical = 4.dp), // Padding around cards
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(
+                                items = todaySchedule,
+                                key = { it.id } // Use stable keys
+                            ) { schedule ->
+                                val isCurrentClass = schedule.isCurrentTime(timeState) // Check against state time
+
+                                // Apply scaling animation to current class (ensure animation states are defined)
+                                val scale by animateFloatAsState(
+                                    targetValue = if (isCurrentClass) 1.05f else 1f,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessLow
+                                    ),
+                                    label = "Class card scale"
+                                )
+
+                                // Call your existing card composable (ensure it's accessible)
+                                HomeScheduleCard(
+                                    schedule = schedule,
+                                    width = calculateWidth(schedule), // Ensure calculateWidth is accessible
+                                    isCurrentClass = isCurrentClass,
+                                    animationScale = scale
+                                )
+                            }
+                        }
+
+                        // Red line indicator (ensure RedLineIndicator & calculateRedLinePosition are accessible)
+                        val redLinePosition = calculateRedLinePosition(timeState)
+                        if (redLinePosition > 0) {
+                            RedLineIndicator(position = redLinePosition)
+                        }
+                    }
+                }
+            } // End When
+        } // End Crossfade
+    } // End Column
+
+    // Force fetch timetable data when this component is first displayed (keep your logic)
     LaunchedEffect(Unit) {
-        if (!isTimetableLoading) {
-            viewModel.fetchTimetableData(forceRefresh = true)
+        if (timetableData == null && !isTimetableLoading) {
+            // Consider using the forceRefresh parameter if needed based on your logic
+            viewModel.fetchTimetableData(forceRefresh = false) // Or true if needed on initial composition
         }
     }
 }
-
 
 private fun parseClassTimes(startTimeStr: String, endTimeStr: String, baseDate: Date): Pair<Date, Date>? {
     try {

@@ -9,14 +9,18 @@
     <string name="close">Close</string>
     <string name="retry">Retry</string>
     <string name="attendance">Attendance</string>
-    <string name="schedule">Schedule</string>
     <string name="home">Home</string>
     <string name="error_loading_profile">Error loading profile data</string>
     <string name="no_profile_data">No profile data available</string>
-    <string name="no_classes_today">No classes scheduled for today</string>
     <string name="personal_information">Personal Information</string>
     <string name="academic_information">Academic Information</string>
     <string name="no_attendance_data">No attendance data available</string>
     <string name="session_expired">Session expired. Please log in again.</string>
     <string name="refresh">Refresh</string>
+    <string name="schedule">Today\'s Schedule</string>
+    <string name="no_classes_today">No classes scheduled today! 🎉</string>
+    <string name="your_day_is_clear">Your day is clear</string>
+    <string name="error_loading_schedule">Couldn\'t load schedule.</string>
+    <string name="details">Details</string> in res/values/strings.xml
+    <string name="view_details">View Details</string>
 </resources>
