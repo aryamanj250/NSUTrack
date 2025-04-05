@@ -18,4 +18,5 @@
     <string name="academic_information">Academic Information</string>
     <string name="no_attendance_data">No attendance data available</string>
     <string name="session_expired">Session expired. Please log in again.</string>
+    <string name="refresh">Refresh</string>
 </resources>

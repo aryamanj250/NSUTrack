@@ -491,7 +491,7 @@ fun DetailedAttendanceView(
                                             end = 16.dp,
                                             top = 8.dp,
                                             // Critical: Extra bottom padding to ensure content fills past bottom nav
-                                            bottom = 120.dp
+                                            bottom = 8.dp
                                         ),
                                         verticalArrangement = Arrangement.spacedBy(16.dp) // Spacing between items
                                     ) {
@@ -525,7 +525,7 @@ fun DetailedAttendanceView(
 
                                         // Extra spacer at bottom to ensure content scrolls past navigation bar
                                         item {
-                                            Spacer(modifier = Modifier.height(80.dp))
+                                            Spacer(modifier = Modifier.height(4.dp))
                                         }
                                     }
                                 }

@@ -224,7 +224,7 @@ class IMSNotificationsViewModel : ViewModel() {
     }
 }
 
-// Composable remains the same
+// Composable updated to fix the padding issues
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
@@ -242,7 +242,7 @@ fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(start = 16.dp, top = 8.dp, bottom = 0.dp) // Removed bottom padding
     ) {
         // Department filter dropdown
         if (departments.isNotEmpty()) {
@@ -334,6 +334,7 @@ fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
             if (filteredNotifications.isNotEmpty()) {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(top = 0.dp, bottom = 0.dp), // Zero bottom padding
                     modifier = Modifier.fillMaxSize() // Use remaining space
                 ) {
                     items(filteredNotifications, key = { it.link }) { notification -> // Add a key for better performance

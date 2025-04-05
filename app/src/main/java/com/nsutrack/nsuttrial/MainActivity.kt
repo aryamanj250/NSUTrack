@@ -7,18 +7,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.OnBackPressedCallback
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.core.view.WindowCompat
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
-// Removed unused navigationBarsPadding and statusBarsPadding from here, handled by Scaffold/innerPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
@@ -28,16 +26,13 @@ import com.nsutrack.nsuttrial.navigation.BottomNavBar
 import com.nsutrack.nsuttrial.navigation.Screen
 import com.nsutrack.nsuttrial.navigation.mainGraph
 import com.nsutrack.nsuttrial.ui.theme.NSUTrackTheme
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.LocalLayoutDirection
-
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         enableEdgeToEdge()
-        WindowCompat.setDecorFitsSystemWindows(window, false) // Correct
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
         val viewModel = ViewModelProvider(this)[AttendanceViewModel::class.java]
         viewModel.initializeSharedPreferences(this)
@@ -63,20 +58,17 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) { innerPadding ->
-                    // Get the layout direction from composition
-                    val layoutDirection = LocalLayoutDirection.current
-
                     NavHost(
                         navController = navController,
                         startDestination = "login",
                         modifier = Modifier
                             .fillMaxSize()
+                            // Apply only the necessary padding:
+                            // - Top padding always to account for status bar
+                            // - Bottom padding only if the bottom nav is shown
                             .padding(
-                                // Only apply padding for other edges, not bottom when bottom bar is visible
-                                bottom = if (shouldShowBottomBar) 0.dp else innerPadding.calculateBottomPadding(),
                                 top = innerPadding.calculateTopPadding(),
-                                start = innerPadding.calculateStartPadding(layoutDirection),
-                                end = innerPadding.calculateEndPadding(layoutDirection)
+                                bottom = if (shouldShowBottomBar) innerPadding.calculateBottomPadding() else 0.dp
                             )
                     ) {
                         mainGraph(navController, viewModel)
@@ -88,12 +80,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setupPredictiveBack() {
-        // Your existing predictive back setup... (unchanged)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    // Simple finish for now
-                    finish()
+                    finish() // Simple finish for now
                 }
             })
         }

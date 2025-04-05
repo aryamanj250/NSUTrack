@@ -26,7 +26,8 @@ fun IMSNoticesScreen(viewModel: AttendanceViewModel) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                // Only apply top padding from the Scaffold
+                .padding(top = paddingValues.calculateTopPadding())
                 .background(MaterialTheme.colorScheme.background)
         ) {
             IMSNoticesView(imsViewModel)

@@ -32,14 +32,14 @@ fun BottomNavBar(navController: NavController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    // Apply a surface with rounded top corners and proper height
+    // Apply a surface with rounded top corners and reduced height
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding(), // This handles the navigation bar area properly
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp,
-        shadowElevation = 6.dp,
+        tonalElevation = 2.dp, // Reduced from 3.dp
+        shadowElevation = 4.dp, // Reduced from 6.dp
         shape = RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp)
     ) {
         NavigationBar(
@@ -48,7 +48,7 @@ fun BottomNavBar(navController: NavController) {
             tonalElevation = 0.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(80.dp) // Fixed height that looks good with navigation gestures
+                .height(64.dp) // Reduced from 80.dp for a more compact navigation bar
         ) {
             screens.forEach { screen ->
                 val selected = currentDestination?.hierarchy?.any {
