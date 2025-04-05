@@ -132,15 +132,17 @@ class IMSNotificationsViewModel : ViewModel() {
                         // Process department name with proper capitalization
                         val capitalizedDeptName = rawDeptName
                             .lowercase()
-                            .split(" ")
-                            .map { word ->
+                            .split(" ").joinToString(" ") { word ->
                                 if (lowercaseExceptions.contains(word.lowercase())) {
                                     word.lowercase()
                                 } else {
-                                    word.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+                                    word.replaceFirstChar {
+                                        if (it.isLowerCase()) it.titlecase(
+                                            Locale.getDefault()
+                                        ) else it.toString()
+                                    }
                                 }
                             }
-                            .joinToString(" ")
 
                         departments.add(capitalizedDeptName)
                     }
@@ -242,7 +244,7 @@ fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 16.dp, top = 8.dp, bottom = 0.dp) // Removed bottom padding
+            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 0.dp) // Equal left/right padding
     ) {
         // Department filter dropdown
         if (departments.isNotEmpty()) {
@@ -259,7 +261,7 @@ fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
                     value = selectedDepartment ?: "All",
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Filter by Department") }, // More descriptive label
+                    label = { Text("Filter by Department") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                     modifier = Modifier
                         .menuAnchor()
@@ -295,7 +297,7 @@ fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Error loading notices:", // Prefix error message
+                        text = "Error loading notices:",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onErrorContainer
@@ -322,7 +324,7 @@ fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 32.dp), // Add vertical padding
+                    .padding(vertical = 32.dp),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator()
@@ -330,22 +332,22 @@ fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
         }
 
         // Notifications list
-        if (!isLoading && errorMessage == null) { // Only show list/empty state when not loading and no error
+        if (!isLoading && errorMessage == null) {
             if (filteredNotifications.isNotEmpty()) {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(top = 0.dp, bottom = 0.dp), // Zero bottom padding
-                    modifier = Modifier.fillMaxSize() // Use remaining space
+                    // No horizontal padding here since it's already applied to the parent Column
+                    contentPadding = PaddingValues(vertical = 0.dp),
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    items(filteredNotifications, key = { it.link }) { notification -> // Add a key for better performance
+                    items(filteredNotifications, key = { it.link }) { notification ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    // Pass notification title to WebViewActivity
                                     viewModel.openLink(notification.link, context, notification.title)
                                 }
-                                .padding(vertical = 2.dp) // Small vertical padding between cards
+                                .padding(vertical = 2.dp)
                         ) {
                             Column(
                                 modifier = Modifier.padding(16.dp)
@@ -353,8 +355,8 @@ fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
                                 Text(
                                     text = notification.date,
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = Color.Gray, // Consider MaterialTheme.colorScheme.outline
-                                    modifier = Modifier.padding(bottom = 6.dp) // Adjusted padding
+                                    color = Color.Gray,
+                                    modifier = Modifier.padding(bottom = 6.dp)
                                 )
                                 Text(
                                     text = notification.title,
@@ -374,10 +376,9 @@ fun IMSNoticesView(viewModel: IMSNotificationsViewModel = viewModel()) {
                     }
                 }
             } else {
-                // Empty state (when not loading and no notifications match filter)
+                // Empty state
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize(), // Take remaining space
+                    modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

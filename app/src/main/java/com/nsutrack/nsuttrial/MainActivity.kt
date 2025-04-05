@@ -63,12 +63,13 @@ class MainActivity : ComponentActivity() {
                         startDestination = "login",
                         modifier = Modifier
                             .fillMaxSize()
-                            // Apply only the necessary padding:
-                            // - Top padding always to account for status bar
-                            // - Bottom padding only if the bottom nav is shown
+                            // Apply padding consistently to ensure proper centering
                             .padding(
                                 top = innerPadding.calculateTopPadding(),
-                                bottom = if (shouldShowBottomBar) innerPadding.calculateBottomPadding() else 0.dp
+                                bottom = if (shouldShowBottomBar) innerPadding.calculateBottomPadding() else 0.dp,
+                                // No horizontal padding here to ensure screens are centered
+                                start = 0.dp,
+                                end = 0.dp
                             )
                     ) {
                         mainGraph(navController, viewModel)
