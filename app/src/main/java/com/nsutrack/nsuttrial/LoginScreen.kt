@@ -163,6 +163,32 @@ fun LoginScreen(
             viewModel.initializeSession()
         }
     }
+    LaunchedEffect(isSessionInitialized) {
+        if (isSessionInitialized && !isLoading && !isLoginInProgress) {
+            if (viewModel.hasStoredCredentials()) {
+                Log.d("LoginScreen", "Found stored credentials, attempting auto-login")
+
+                // Get stored credentials and use them
+                val credentials = viewModel.getStoredCredentials()
+                credentials?.let { (storedUsername, storedPassword) ->
+                    // Update UI state to match stored credentials
+                    username = storedUsername
+                    password = storedPassword
+
+                    // Delay slightly for better UX
+                    delay(300)
+
+                    // Attempt login with stored credentials
+                    viewModel.login(storedUsername, storedPassword)
+
+                    // Provide subtle feedback
+                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                }
+            } else {
+                Log.d("LoginScreen", "No stored credentials found")
+            }
+        }
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),

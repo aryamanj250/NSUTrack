@@ -923,6 +923,57 @@ class AttendanceViewModel : ViewModel() {
         activeProfileJob?.cancel()
         activeTimetableJob?.cancel()
     }
+    fun logout() {
+        viewModelScope.launch {
+            Log.d(TAG, "Logging out user")
+
+            // Clear stored credentials
+            _storedUsername.value = null
+            _storedPassword.value = null
+
+            // Clear from SharedPreferences
+            sharedPreferences?.edit {
+                remove("username")
+                remove("password")
+                apply()
+            }
+
+            // Clear session and auth state
+            _sessionId.value = null
+            _isLoggedIn.value = false
+            _isSessionInitialized.value = false
+
+            // Clear data
+            _subjectData.value = emptyList()
+            _profileData.value = null
+            _timetableData.value = null
+            _isAttendanceDataLoaded.value = false
+
+            // Cancel any pending requests
+            cancelRequests()
+
+            // Re-initialize session (optional, depending on your flow)
+            initializeSession()
+        }
+    }
+
+    fun hasStoredCredentials(): Boolean {
+        return !_storedUsername.value.isNullOrEmpty() && !_storedPassword.value.isNullOrEmpty()
+    }
+
+    /**
+     * Gets stored credentials as a pair of username and password
+     */
+    fun getStoredCredentials(): Pair<String, String>? {
+        val username = _storedUsername.value
+        val password = _storedPassword.value
+
+        return if (!username.isNullOrEmpty() && !password.isNullOrEmpty()) {
+            Pair(username, password)
+        } else {
+            null
+        }
+    }
 
     override fun onCleared() {
         super.onCleared()
@@ -977,5 +1028,7 @@ data class ProfileData(
     @SerializedName("Section")
     val section: String = ""
 )
+
+
 
 

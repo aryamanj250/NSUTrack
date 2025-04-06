@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
@@ -516,6 +517,46 @@ fun AccountView(
                                                     }
                                                 }
                                             )
+                                        }
+
+                                        // Add Logout Button Section
+                                        item {
+                                            Spacer(modifier = Modifier.height(24.dp))
+
+                                            Button(
+                                                onClick = {
+                                                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                                    coroutineScope.launch {
+                                                        viewModel.logout()
+                                                        visible.targetState = false
+                                                        delay(200)
+                                                        onDismiss()
+                                                    }
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                                ),
+                                                shape = RoundedCornerShape(12.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.ExitToApp,
+                                                    contentDescription = "Logout",
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = "Logout",
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+
+                                            // Add extra space at the bottom for better spacing
+                                            Spacer(modifier = Modifier.height(16.dp))
                                         }
                                     }
                                 }
