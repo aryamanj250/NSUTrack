@@ -40,6 +40,7 @@ import java.util.*
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import android.util.Log
+import androidx.compose.animation.core.EaseOutQuint
 
 /**
  * Bottom sheet implementation for attendance details with fast, smooth animations
@@ -228,8 +229,14 @@ fun DetailedAttendanceView(
                 visible = visible.targetState,
                 enter = slideInVertically(
                     initialOffsetY = { it },
-                    animationSpec = tween(250, easing = emphasizedEasing)
-                ) + fadeIn(tween(200)),
+                    animationSpec = spring(
+                        dampingRatio = 0.9f,
+                        stiffness = 300f,
+                        visibilityThreshold = null
+                    )
+                ) + fadeIn(
+                    animationSpec = tween(150)
+                ),
                 exit = slideOutVertically(
                     targetOffsetY = { it },
                     animationSpec = tween(180, easing = standardEasing)

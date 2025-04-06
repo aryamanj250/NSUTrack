@@ -37,6 +37,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.compose.animation.core.EaseOutQuint
+
 
 /**
  * Google-styled Profile View with simplified animations
@@ -140,17 +142,24 @@ fun AccountView(
             )
 
             // Main sheet with Google-style animation (faster, cleaner)
+            // Main sheet with Google-style animation
             AnimatedVisibility(
                 visible = visible.targetState,
                 enter = slideInVertically(
                     initialOffsetY = { it },
-                    animationSpec = tween(220, easing = standardEasing)
-                ) + fadeIn(tween(180)),
+                    animationSpec = spring(
+                        dampingRatio = 0.9f,
+                        stiffness = 300f,
+                        visibilityThreshold = null
+                    )
+                ) + fadeIn(
+                    animationSpec = tween(150)
+                ),
                 exit = slideOutVertically(
                     targetOffsetY = { it },
                     animationSpec = tween(150, easing = standardEasing)
                 ) + fadeOut(tween(120))
-            ) {
+            ){
                 // Get exact screen height
                 var screenHeight by remember { mutableStateOf(0) }
 
