@@ -656,12 +656,7 @@ fun AttendanceHeader(subject: SubjectData) {
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF4CAF50)
                 )
-                Text(
-                    text = "${subject.overallPresent}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF4CAF50)
-                )
+                // Removed the duplicated Text component here
                 Text(
                     text = "Present",
                     style = MaterialTheme.typography.bodyMedium,
@@ -745,7 +740,6 @@ fun AttendanceHeader(subject: SubjectData) {
         }
     }
 }
-
 @Composable
 fun RecordRow(record: AttendanceRecord) {
     // Format the date
