@@ -904,8 +904,7 @@ fun AttendanceCard(
     modifier: Modifier = Modifier
 ) {
     var showDetailedView by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()  // Add this line
-
+    val coroutineScope = rememberCoroutineScope()
 
     var isPressed by remember { mutableStateOf(false) }
 
@@ -945,11 +944,22 @@ fun AttendanceCard(
                 .scale(cardScale)
                 .shadow(
                     elevation = cardElevation.dp,
-                    shape = RoundedCornerShape(16.dp), // Increased from 12.dp
-                    spotColor = attendanceColor.copy(alpha = 0.15f) // Added spot color
+                    shape = RoundedCornerShape(16.dp),
+                    spotColor = attendanceColor.copy(alpha = 0.15f)
                 )
                 .clip(RoundedCornerShape(16.dp))
-                .clickable { /* existing code */ },
+                .clickable {
+                    // Set isPressed for button press animation
+                    isPressed = true
+                    // Provide haptic feedback
+                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                    // Reset pressed state after a short delay and show the detailed view
+                    coroutineScope.launch {
+                        delay(100)
+                        isPressed = false
+                        showDetailedView = true
+                    }
+                },
             color = MaterialTheme.colorScheme.surface
         ) {
             Column {
