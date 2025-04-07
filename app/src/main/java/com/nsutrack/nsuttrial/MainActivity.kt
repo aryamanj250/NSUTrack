@@ -26,13 +26,14 @@ import com.nsutrack.nsuttrial.navigation.BottomNavBar
 import com.nsutrack.nsuttrial.navigation.Screen
 import com.nsutrack.nsuttrial.navigation.mainGraph
 import com.nsutrack.nsuttrial.ui.theme.NSUTrackTheme
+import android.graphics.Color
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        enableEdgeToEdge()
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // enableEdgeToEdge() // Commented out
+        // WindowCompat.setDecorFitsSystemWindows(window, false) // Commented out
 
         val viewModel = ViewModelProvider(this)[AttendanceViewModel::class.java]
         viewModel.initializeSharedPreferences(this)

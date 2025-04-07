@@ -151,8 +151,8 @@ fun HomeScreen(
                 },
             state = rememberLazyListState(),
             contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
+                start = 0.dp,
+                end = 0.dp,
                 top = 8.dp,
                 bottom = 0.dp // CRITICAL: No bottom padding here to eliminate dead space
             ),
@@ -167,7 +167,10 @@ fun HomeScreen(
             if (errorMessage.isNotEmpty()) {
                 item {
                     ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().animateItemPlacement(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateItemPlacement()
+                            .padding(horizontal = 16.dp),
                         colors = CardDefaults.elevatedCardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         ),
@@ -191,7 +194,9 @@ fun HomeScreen(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    modifier = Modifier
+                        .padding(top = 0.dp, bottom = 8.dp)
+                        .padding(horizontal = 16.dp)
                 )
             }
 
@@ -201,7 +206,10 @@ fun HomeScreen(
                 isLoading && subjectData.isEmpty() -> {
                     item {
                         Box(
-                            modifier = Modifier.fillMaxWidth().height(200.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                                .padding(horizontal = 16.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             CircularProgressIndicator(
@@ -216,7 +224,10 @@ fun HomeScreen(
                 subjectData.isEmpty() && !isLoading && errorMessage.isEmpty() -> {
                     item {
                         Box(
-                            modifier = Modifier.fillMaxWidth().height(200.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                                .padding(horizontal = 16.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -253,20 +264,40 @@ fun HomeScreen(
                 }
                 // Data Available State
                 subjectData.isNotEmpty() -> {
-                    items(
-                        items = subjectData,
-                        key = { it.code }
-                    ) { subject ->
-                            AttendanceCard(
-                            subject = subject,
-                            viewModel = viewModel,
-                            hapticFeedback = hapticFeedback,
-                            modifier = Modifier.animateItemPlacement(tween(300))
-                        )
+                    item(key = "attendance-list-card") { // Use a stable key for the single card item
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateItemPlacement(tween(300))
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.3f)
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat design
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                subjectData.forEachIndexed { index, subject ->
+                                    SubjectRowContent( // Call the new composable for each subject's content
+                                        subject = subject,
+                                        viewModel = viewModel, // Pass viewModel if needed by DetailedAttendanceView
+                                        hapticFeedback = hapticFeedback,
+                                        modifier = Modifier.fillMaxWidth() // Ensure row content fills width inside Column
+                                    )
+                                    // Add a divider between items, but not after the last one
+                                    if (index < subjectData.size - 1) {
+                                        Divider(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp), // Indent divider to align with content padding inside card
+                                            thickness = 0.5.dp,
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f) // Subtle color
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
-
-                    // IMPORTANT: If this is the last item, don't add any spacer or padding at the end
-                    // No footer spacer item - explicitly removed to eliminate dead space
                 }
                 else -> { /* Handled by other states */ }
             }
@@ -424,15 +455,13 @@ fun HomeScheduleSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp) // Consistent bottom padding
     ) {
         // Section header with icon and loading indicator
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .padding(vertical = 12.dp) // Keep padding consistent
-            // Add horizontal padding if needed, e.g., .padding(horizontal = 16.dp, vertical = 12.dp)
-            // If horizontal padding is applied globally in LazyColumn, you might not need it here.
+                .padding(vertical = 12.dp)
+                .padding(horizontal = 16.dp)
         ) {
             Text(
                 text = stringResource(R.string.schedule), // Use updated string if needed
@@ -460,7 +489,10 @@ fun HomeScheduleSection(
                 // Show Error Card first if an error exists
                 error != null -> {
                     Card(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .padding(horizontal = 16.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         ),
@@ -480,6 +512,7 @@ fun HomeScheduleSection(
                     Box(modifier = Modifier
                         .fillMaxWidth()
                         .height(95.dp) // Match the 'No classes' card height
+                        .padding(horizontal = 16.dp)
                         .clip(RoundedCornerShape(15.dp)) // Clip shape for consistency
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                     ) {
@@ -493,6 +526,7 @@ fun HomeScheduleSection(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(95.dp)
+                            .padding(horizontal = 16.dp)
                             .animateContentSize(), // Animate size changes smoothly
                         shape = RoundedCornerShape(15.dp),
                         colors = CardDefaults.cardColors(
@@ -538,7 +572,7 @@ fun HomeScheduleSection(
                         LazyRow(
                             state = listState,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(vertical = 4.dp), // Padding around cards
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             items(
@@ -907,24 +941,24 @@ fun DashedBorder(
 }
 @OptIn(ExperimentalMaterial3Api::class) // Necessary for Card defaults
 @Composable
-fun AttendanceCard(
+fun SubjectRowContent(
     subject: SubjectData,
     viewModel: AttendanceViewModel, // Keep viewModel if needed for DetailedAttendanceView or future actions
     hapticFeedback: HapticFeedback.HapticHandler,
-    modifier: Modifier = Modifier // Pass modifier for external controls like animateItemPlacement
+    modifier: Modifier = Modifier
 ) {
     var showDetailedView by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     var isPressed by remember { mutableStateOf(false) }
 
-    // Scale animation for interactive feedback on the card
-    val cardScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
+    // Scale animation for interactive feedback on the row
+    val rowScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f, // Slightly less pronounced scale than card
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioLowBouncy,
             stiffness = Spring.StiffnessMediumLow
         ),
-        label = "Card Scale"
+        label = "SubjectRow Scale"
     )
 
     // Calculate advice text based on attendance data
@@ -944,114 +978,74 @@ fun AttendanceCard(
         }
     }
 
-    // --- Item Layout Structure ---
-    // Root Column for the entire list item (Card + Spacer + Divider)
-    Column(
-        // Apply external modifier first (e.g., from LazyColumn's items scope)
-        modifier = modifier
-            .fillMaxWidth()
-        // No vertical padding here - spacing is controlled by LazyColumn's verticalArrangement
-    ) {
-        // Translucent Card holding the main interactive content
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .scale(cardScale) // Apply press animation scale
-                .clip(RoundedCornerShape(16.dp)) // Consistent rounded corners
-                .clickable {
-                    isPressed = true
-                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                    coroutineScope.launch {
-                        delay(150) // Duration for press animation visibility
-                        isPressed = false
-                        showDetailedView = true // Trigger detail view after animation
-                    }
-                },
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                // Use a theme color with reduced alpha for translucency
-                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.3f)
-                // Adjust alpha or color (e.g., surfaceVariant) as needed for your theme
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat design
-        ) {
-            // Row containing the textual and icon content inside the Card
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // Padding inside the Card
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Left Column: Subject Name and Advice
-                Column(
-                    modifier = Modifier.weight(1f), // Occupy available space
-                    verticalArrangement = Arrangement.spacedBy(4.dp) // Space between texts
-                ) {
-                    Text(
-                        text = subject.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface, // Adjust color based on contrast if needed
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Text(
-                        text = adviceText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                // Right Row: Attendance Percentage and Arrow Icon
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End,
-                    modifier = Modifier.padding(start = 12.dp) // Space from left content
-                ) {
-                    Text(
-                        text = "${subject.attendancePercentage.toInt()}%",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = attendanceColor, // Dynamic color
-                        modifier = Modifier.align(Alignment.CenterVertically)
-                    )
-
-                    Spacer(Modifier.width(8.dp)) // Space before icon
-
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = stringResource(R.string.details), // Accessibility
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(20.dp) // Consistent icon size
-                    )
+    // Row containing the textual and icon content
+    Row(
+        modifier = modifier // Apply external modifier
+            .scale(rowScale) // Apply press animation scale
+            .clickable {
+                isPressed = true
+                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                coroutineScope.launch {
+                    delay(150) // Duration for press animation visibility
+                    isPressed = false
+                    showDetailedView = true // Trigger detail view after animation
                 }
             }
-        } // End Card
+            // Padding inside the Row, defining the content area
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Left Column: Subject Name and Advice
+        Column(
+            modifier = Modifier.weight(1f), // Occupy available space
+            verticalArrangement = Arrangement.spacedBy(4.dp) // Space between texts
+        ) {
+            Text(
+                text = subject.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface, // Use onSurface for content inside the card
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
-        // Spacer placed *after* the Card and *before* the Divider
-        // Pushes the Divider down to appear more centered in the LazyColumn's item gap.
-        // Adjust height (e.g., half of LazyColumn's verticalArrangement spacing)
-        Spacer(modifier = Modifier.height(4.dp)) // Example: use 4.dp if LazyColumn spacedBy is 8.dp
+            Text(
+                text = adviceText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, // Use onSurfaceVariant
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
 
-        // Divider visually separates this item from the next one below
-        Divider(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp), // Indent to align with content padding
-            thickness = 0.5.dp, // Thin and subtle
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f) // Subtle color
-        )
+        // Right Row: Attendance Percentage and Arrow Icon
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End,
+            modifier = Modifier.padding(start = 12.dp) // Space from left content
+        ) {
+            Text(
+                text = "${subject.attendancePercentage.toInt()}%",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = attendanceColor, // Dynamic color
+                modifier = Modifier.align(Alignment.CenterVertically)
+            )
 
-    } // End Root Column
+            Spacer(Modifier.width(8.dp)) // Space before icon
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = stringResource(R.string.details), // Accessibility
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                modifier = Modifier.size(20.dp) // Consistent icon size
+            )
+        }
+    } // End Row
 
     // Conditional display of the Detailed Attendance View (BottomSheet or Dialog)
     if (showDetailedView) {
-        // Ensure DetailedAttendanceView composable exists and is imported
         DetailedAttendanceView(
             subject = subject,
             onDismiss = { showDetailedView = false }
@@ -1060,6 +1054,7 @@ fun AttendanceCard(
         )
     }
 }
+
 // Helper function to generate consistent colors for subjects
 private fun generateConsistentColor(subjectCode: String): Color {
     // Simple hash function to get consistent colors
