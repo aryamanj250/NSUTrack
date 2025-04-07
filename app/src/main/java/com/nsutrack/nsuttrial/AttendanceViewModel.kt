@@ -83,6 +83,11 @@ class AttendanceViewModel : ViewModel() {
     private val _useDynamicColors = MutableStateFlow(true)
     val useDynamicColors: StateFlow<Boolean> = _useDynamicColors
 
+    private val _logoutCompleted = MutableStateFlow(false)
+    val logoutCompleted: StateFlow<Boolean> = _logoutCompleted
+
+
+
     // Stored credentials for auto-refresh
     private val _storedUsername = MutableStateFlow<String?>(null)
     private val _storedPassword = MutableStateFlow<String?>(null)
@@ -482,6 +487,47 @@ class AttendanceViewModel : ViewModel() {
             }
             _errorMessage.value = "Error processing attendance data: ${e.message}"
             _subjectData.value = emptyList()
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            Log.d(TAG, "Logging out user")
+
+            // Clear stored credentials
+            _storedUsername.value = null
+            _storedPassword.value = null
+
+            // Clear from SharedPreferences
+            sharedPreferences?.edit {
+                remove("username")
+                remove("password")
+                apply()
+            }
+
+            // Clear session and auth state
+            _sessionId.value = null
+            _isLoggedIn.value = false
+            _isSessionInitialized.value = false
+
+            // Clear data
+            _subjectData.value = emptyList()
+            _profileData.value = null
+            _timetableData.value = null
+            _isAttendanceDataLoaded.value = false
+
+            // Cancel any pending requests
+            cancelRequests()
+
+            // Signal that logout is complete
+            _logoutCompleted.value = true
+
+            // Reset after a short delay
+            delay(100)
+            _logoutCompleted.value = false
+
+            // Re-initialize session (optional, depending on your flow)
+            initializeSession()
         }
     }
 
@@ -922,39 +968,6 @@ class AttendanceViewModel : ViewModel() {
         activeAttendanceJob?.cancel()
         activeProfileJob?.cancel()
         activeTimetableJob?.cancel()
-    }
-    fun logout() {
-        viewModelScope.launch {
-            Log.d(TAG, "Logging out user")
-
-            // Clear stored credentials
-            _storedUsername.value = null
-            _storedPassword.value = null
-
-            // Clear from SharedPreferences
-            sharedPreferences?.edit {
-                remove("username")
-                remove("password")
-                apply()
-            }
-
-            // Clear session and auth state
-            _sessionId.value = null
-            _isLoggedIn.value = false
-            _isSessionInitialized.value = false
-
-            // Clear data
-            _subjectData.value = emptyList()
-            _profileData.value = null
-            _timetableData.value = null
-            _isAttendanceDataLoaded.value = false
-
-            // Cancel any pending requests
-            cancelRequests()
-
-            // Re-initialize session (optional, depending on your flow)
-            initializeSession()
-        }
     }
 
     fun hasStoredCredentials(): Boolean {

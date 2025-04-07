@@ -38,7 +38,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import androidx.compose.animation.core.EaseOutQuint
 
 
 /**
@@ -48,7 +47,8 @@ import androidx.compose.animation.core.EaseOutQuint
 @Composable
 fun AccountView(
     viewModel: AttendanceViewModel,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onLogout: () -> Unit = {}
 ) {
     val profileData by viewModel.profileData.collectAsState()
     val isLoading by viewModel.isProfileLoading.collectAsState()
@@ -531,6 +531,7 @@ fun AccountView(
                                                         visible.targetState = false
                                                         delay(200)
                                                         onDismiss()
+                                                        onLogout() // Call the onLogout function here
                                                     }
                                                 },
                                                 modifier = Modifier

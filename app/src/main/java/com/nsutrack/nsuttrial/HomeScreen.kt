@@ -276,7 +276,16 @@ fun HomeScreen(
 
     // --- Account Bottom Sheet Display (Unchanged) ---
     if (showingAccountSheet) {
-        AccountView(viewModel = viewModel, onDismiss = { showingAccountSheet = false })
+        AccountView(
+            viewModel = viewModel,
+            onDismiss = { showingAccountSheet = false },
+            onLogout = {
+                // Navigate to login screen
+                navController.navigate("login") {
+                    popUpTo("home") { inclusive = true }
+                }
+            }
+        )
     }
 } // End HomeScreen Composable
 
