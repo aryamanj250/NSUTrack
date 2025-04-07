@@ -905,149 +905,158 @@ fun DashedBorder(
         )
     }
 }
+@OptIn(ExperimentalMaterial3Api::class) // Necessary for Card defaults
 @Composable
 fun AttendanceCard(
     subject: SubjectData,
-    viewModel: AttendanceViewModel,
+    viewModel: AttendanceViewModel, // Keep viewModel if needed for DetailedAttendanceView or future actions
     hapticFeedback: HapticFeedback.HapticHandler,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier // Pass modifier for external controls like animateItemPlacement
 ) {
     var showDetailedView by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
-
     var isPressed by remember { mutableStateOf(false) }
 
+    // Scale animation for interactive feedback on the card
     val cardScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.98f else 1f,
+        targetValue = if (isPressed) 0.97f else 1f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow
         ),
         label = "Card Scale"
     )
 
-    val cardElevation by animateFloatAsState(
-        targetValue = if (isPressed) 1f else 3f,
-        label = "Card Elevation"
-    )
-
+    // Calculate advice text based on attendance data
     val (adviceText, _) = getAttendanceAdvice(
         subject.overallPresent,
         subject.overallClasses
     )
 
-    // Get attendance color based on percentage
-    val attendanceColor = when {
-        subject.attendancePercentage >= 85.0f -> Color(0xFF4CAF50) // Green
-        subject.attendancePercentage >= 75.0f -> Color(0xFF8BC34A) // Light Green
-        subject.attendancePercentage >= 65.0f -> Color(0xFFFFC107) // Yellow/Amber
-        subject.attendancePercentage >= 60.0f -> Color(0xFFFF9800) // Orange
-        else -> Color(0xFFE57373) // Soft Red
-    }
-
-    Column(modifier = modifier) {
-        // Main content with enhanced animation
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .scale(cardScale)
-                .shadow(
-                    elevation = cardElevation.dp,
-                    shape = RoundedCornerShape(16.dp),
-                    spotColor = attendanceColor.copy(alpha = 0.15f)
-                )
-                .clip(RoundedCornerShape(16.dp))
-                .clickable {
-                    // Set isPressed for button press animation
-                    isPressed = true
-                    // Provide haptic feedback
-                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                    // Reset pressed state after a short delay and show the detailed view
-                    coroutineScope.launch {
-                        delay(100)
-                        isPressed = false
-                        showDetailedView = true
-                    }
-                },
-            color = MaterialTheme.colorScheme.surface
-        ) {
-            Column {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 16.dp, horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    // Left section with subject info
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = subject.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            text = adviceText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    // Right section with percentage and arrow
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        // Percentage with colored text
-                        Text(
-                            text = "${subject.attendancePercentage.toInt()}%",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = attendanceColor
-                        )
-
-                        // Arrow icon with animation
-                        val arrowRotation by animateFloatAsState(
-                            targetValue = if (isPressed) 10f else 0f,
-                            label = "Arrow Rotation"
-                        )
-
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = "Details",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier
-                                .padding(start = 8.dp)
-                                .rotate(arrowRotation)
-                        )
-                    }
-                }
-
-                // Divider at the bottom of each card
-                Divider(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    thickness = 0.5.dp
-                )
-            }
+    // Determine color for the percentage text based on attendance
+    val attendanceColor = remember(subject.attendancePercentage) { // Memoize color calculation
+        when {
+            subject.attendancePercentage >= 85.0f -> Color(0xFF4CAF50) // Green
+            subject.attendancePercentage >= 75.0f -> Color(0xFF8BC34A) // Light Green
+            subject.attendancePercentage >= 65.0f -> Color(0xFFFFC107) // Yellow/Amber
+            subject.attendancePercentage >= 60.0f -> Color(0xFFFF9800) // Orange
+            else -> Color(0xFFE57373) // Soft Red
         }
     }
 
-    // Show detailed view when requested
+    // --- Item Layout Structure ---
+    // Root Column for the entire list item (Card + Spacer + Divider)
+    Column(
+        // Apply external modifier first (e.g., from LazyColumn's items scope)
+        modifier = modifier
+            .fillMaxWidth()
+        // No vertical padding here - spacing is controlled by LazyColumn's verticalArrangement
+    ) {
+        // Translucent Card holding the main interactive content
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .scale(cardScale) // Apply press animation scale
+                .clip(RoundedCornerShape(16.dp)) // Consistent rounded corners
+                .clickable {
+                    isPressed = true
+                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                    coroutineScope.launch {
+                        delay(150) // Duration for press animation visibility
+                        isPressed = false
+                        showDetailedView = true // Trigger detail view after animation
+                    }
+                },
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                // Use a theme color with reduced alpha for translucency
+                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.3f)
+                // Adjust alpha or color (e.g., surfaceVariant) as needed for your theme
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat design
+        ) {
+            // Row containing the textual and icon content inside the Card
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // Padding inside the Card
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Left Column: Subject Name and Advice
+                Column(
+                    modifier = Modifier.weight(1f), // Occupy available space
+                    verticalArrangement = Arrangement.spacedBy(4.dp) // Space between texts
+                ) {
+                    Text(
+                        text = subject.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface, // Adjust color based on contrast if needed
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Text(
+                        text = adviceText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // Right Row: Attendance Percentage and Arrow Icon
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.padding(start = 12.dp) // Space from left content
+                ) {
+                    Text(
+                        text = "${subject.attendancePercentage.toInt()}%",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = attendanceColor, // Dynamic color
+                        modifier = Modifier.align(Alignment.CenterVertically)
+                    )
+
+                    Spacer(Modifier.width(8.dp)) // Space before icon
+
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = stringResource(R.string.details), // Accessibility
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(20.dp) // Consistent icon size
+                    )
+                }
+            }
+        } // End Card
+
+        // Spacer placed *after* the Card and *before* the Divider
+        // Pushes the Divider down to appear more centered in the LazyColumn's item gap.
+        // Adjust height (e.g., half of LazyColumn's verticalArrangement spacing)
+        Spacer(modifier = Modifier.height(4.dp)) // Example: use 4.dp if LazyColumn spacedBy is 8.dp
+
+        // Divider visually separates this item from the next one below
+        Divider(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp), // Indent to align with content padding
+            thickness = 0.5.dp, // Thin and subtle
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f) // Subtle color
+        )
+
+    } // End Root Column
+
+    // Conditional display of the Detailed Attendance View (BottomSheet or Dialog)
     if (showDetailedView) {
+        // Ensure DetailedAttendanceView composable exists and is imported
         DetailedAttendanceView(
             subject = subject,
-            onDismiss = {
-                showDetailedView = false
-            }
+            onDismiss = { showDetailedView = false }
+            // Pass viewModel if DetailedAttendanceView needs it
+            // viewModel = viewModel
         )
     }
 }

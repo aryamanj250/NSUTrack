@@ -1,5 +1,8 @@
 package com.nsutrack.nsuttrial
 
+import android.content.Intent // <-- Import Intent
+import android.net.Uri // <-- Import Uri
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -14,18 +17,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.ExitToApp
+// Icon for logout button is removed, so ExitToApp is no longer needed here
+// import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.*
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.HorizontalDivider // Explicit import if needed, often covered by material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color // Keep import, might be needed elsewhere or for custom colors later
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext // <-- Import LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -41,7 +46,7 @@ import kotlin.math.roundToInt
 
 
 /**
- * Google-styled Profile View with simplified animations
+ * Google-styled Profile View with simplified animations and modified logout/contact buttons
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,8 +58,10 @@ fun AccountView(
     val profileData by viewModel.profileData.collectAsState()
     val isLoading by viewModel.isProfileLoading.collectAsState()
     val errorMessage by viewModel.profileError.collectAsState()
+    // Assuming HapticFeedback is correctly set up in your project's context
     val hapticFeedback = HapticFeedback.getHapticFeedback()
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current // <-- Get context for Intent
 
     // Get window size for precise calculations
     val view = LocalView.current
@@ -77,7 +84,7 @@ fun AccountView(
         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
         coroutineScope.launch {
             visible.targetState = false
-            delay(200)
+            delay(200) // Keep delay consistent with animations
             onDismiss()
         }
     }
@@ -96,7 +103,7 @@ fun AccountView(
         },
         properties = DialogProperties(
             dismissOnBackPress = true,
-            dismissOnClickOutside = false,
+            dismissOnClickOutside = false, // Keep false to prevent accidental dismiss
             usePlatformDefaultWidth = false
         )
     ) {
@@ -110,7 +117,7 @@ fun AccountView(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.BottomCenter
         ) {
-            // Scrim animation - Google uses a more subtle scrim
+            // Scrim animation
             val scrimAlpha by animateFloatAsState(
                 targetValue = if (sheetState == EXPANDED) 0.6f else if (sheetState == HALF_EXPANDED) 0.4f else 0f,
                 animationSpec = tween(200, easing = standardEasing),
@@ -135,182 +142,157 @@ fun AccountView(
                                 sheetState = HIDDEN
                                 delay(150)
                                 visible.targetState = false
-                                delay(150)
+                                delay(150) // Match exit animation timings
                                 onDismiss()
                             }
                         }
                     }
             )
 
-            // Main sheet with Google-style animation (faster, cleaner)
-            // Main sheet with Google-style animation
+            // Main sheet animation
             AnimatedVisibility(
                 visible = visible.targetState,
                 enter = slideInVertically(
                     initialOffsetY = { it },
                     animationSpec = spring(
-                        dampingRatio = 0.9f,
-                        stiffness = 300f,
+                        dampingRatio = 0.9f, // Slightly less bounce
+                        stiffness = 350f, // Slightly adjusted stiffness
                         visibilityThreshold = null
                     )
-                ) + fadeIn(
-                    animationSpec = tween(150)
-                ),
+                ) + fadeIn(animationSpec = tween(150)),
                 exit = slideOutVertically(
                     targetOffsetY = { it },
                     animationSpec = tween(150, easing = standardEasing)
                 ) + fadeOut(tween(120))
-            ){
-                // Get exact screen height
+            ) {
                 var screenHeight by remember { mutableStateOf(0) }
 
-                // Sheet height with precise calculation - Google uses standard fractions
                 val sheetHeightFraction by animateFloatAsState(
                     targetValue = if (sheetState == EXPANDED) 0.90f else if (sheetState == HALF_EXPANDED) 0.75f else 0f,
                     animationSpec = spring(
-                        dampingRatio = 0.8f, // Less bouncy, more Google-like
+                        dampingRatio = 0.8f,
                         stiffness = 400f,
                         visibilityThreshold = 0.001f
                     ),
                     label = "SheetHeight"
                 )
 
-                // Calculate height in pixels
                 val sheetHeightPx = if (screenHeight > 0) {
                     (screenHeight * sheetHeightFraction).roundToInt()
                 } else {
-                    0
+                    0 // Avoid division by zero or invalid height initially
                 }
 
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
+                        // Calculate height dynamically, ensuring it doesn't exceed 90%
                         .height(with(density) { (sheetHeightPx.coerceAtMost((screenHeight * 0.90f).toInt())).toDp() })
                         .offset { IntOffset(0, dragOffset.roundToInt()) }
                         .onSizeChanged {
-                            // Store screen height
-                            if (screenHeight == 0) {
+                            if (screenHeight == 0) { // Get height only once
                                 screenHeight = view.height
                             }
                         }
                         .graphicsLayer {
-                            this.shadowElevation = 4f // Google uses consistent elevation
-                            this.shape = RoundedCornerShape(
-                                topStart = 16.dp, topEnd = 16.dp // Google uses consistent corner radius
-                            )
+                            shadowElevation = 4f
+                            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
                             clip = true
                         },
                     color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 2.dp
+                    tonalElevation = 2.dp // Subtle elevation
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        // Draggable header in Google style - simpler
+                        // Draggable header
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .pointerInput(Unit) {
                                     detectVerticalDragGestures(
-                                        onDragStart = {
-                                            isDragging = true
-                                        },
+                                        onDragStart = { isDragging = true },
                                         onDragEnd = {
                                             isDragging = false
-
                                             coroutineScope.launch {
                                                 val currentVelocity = velocityTracker
                                                 val velocityThreshold = 250f
-                                                val offsetThreshold = 30f
+                                                val offsetThreshold = 30f // Pixels to trigger state change
 
-                                                when {
-                                                    // Fast downward fling when expanded
-                                                    currentVelocity > velocityThreshold && sheetState == EXPANDED -> {
-                                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                                                        sheetState = HALF_EXPANDED
-                                                    }
-
-                                                    // Fast downward fling when half expanded
-                                                    currentVelocity > velocityThreshold * 1.5f && sheetState == HALF_EXPANDED -> {
-                                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                                                        sheetState = HIDDEN
-                                                        delay(150)
-                                                        visible.targetState = false
-                                                        delay(150)
-                                                        onDismiss()
-                                                    }
-
-                                                    // Fast upward fling when half expanded
-                                                    currentVelocity < -velocityThreshold && sheetState == HALF_EXPANDED -> {
-                                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                                                        sheetState = EXPANDED
-                                                    }
-
-                                                    // Position-based decisions
-                                                    dragOffset > offsetThreshold && sheetState == EXPANDED -> {
-                                                        sheetState = HALF_EXPANDED
-                                                    }
-                                                    dragOffset < -offsetThreshold && sheetState == HALF_EXPANDED -> {
-                                                        sheetState = EXPANDED
-                                                    }
-                                                    dragOffset > offsetThreshold * 2 && sheetState == HALF_EXPANDED -> {
-                                                        sheetState = HIDDEN
-                                                        delay(150)
-                                                        visible.targetState = false
-                                                        delay(150)
-                                                        onDismiss()
-                                                    }
-
-                                                    else -> {
-                                                        val springSpec = spring<Float>(
-                                                            dampingRatio = 0.8f, // Less bouncy
-                                                            stiffness = 500f
-                                                        )
-                                                        animate(
-                                                            initialValue = dragOffset,
-                                                            targetValue = 0f,
-                                                            animationSpec = springSpec
-                                                        ) { value, _ ->
-                                                            dragOffset = value
-                                                        }
-                                                    }
+                                                // Determine target state based on velocity and offset
+                                                val targetState = when {
+                                                    currentVelocity > velocityThreshold * 1.5f && sheetState == HALF_EXPANDED -> HIDDEN
+                                                    currentVelocity > velocityThreshold && sheetState == EXPANDED -> HALF_EXPANDED
+                                                    currentVelocity < -velocityThreshold && sheetState == HALF_EXPANDED -> EXPANDED
+                                                    dragOffset > offsetThreshold * 2 && sheetState == HALF_EXPANDED -> HIDDEN
+                                                    dragOffset > offsetThreshold && sheetState == EXPANDED -> HALF_EXPANDED
+                                                    dragOffset < -offsetThreshold && sheetState == HALF_EXPANDED -> EXPANDED
+                                                    else -> sheetState // Snap back to current state
                                                 }
 
-                                                velocityTracker = 0f
+                                                // Perform haptic feedback based on state change
+                                                if (targetState != sheetState) {
+                                                    val feedbackType = when (targetState) {
+                                                        HIDDEN -> HapticFeedback.FeedbackType.MEDIUM
+                                                        else -> HapticFeedback.FeedbackType.LIGHT
+                                                    }
+                                                    hapticFeedback.performHapticFeedback(feedbackType)
+                                                }
+
+                                                // Animate drag offset back to zero if not changing state
+                                                if (targetState == sheetState && dragOffset != 0f) {
+                                                    animate(
+                                                        initialValue = dragOffset, targetValue = 0f,
+                                                        animationSpec = spring(dampingRatio = 0.8f, stiffness = 500f)
+                                                    ) { value, _ -> dragOffset = value }
+                                                } else {
+                                                    // Apply target state
+                                                    sheetState = targetState
+                                                    // If hiding, trigger dismiss flow
+                                                    if (sheetState == HIDDEN) {
+                                                        delay(150)
+                                                        visible.targetState = false
+                                                        delay(150) // Allow exit animation
+                                                        onDismiss()
+                                                    }
+                                                }
+                                                // Reset drag offset smoothly if state didn't change immediately to HIDDEN
+                                                if (targetState != HIDDEN) dragOffset = 0f
+                                                velocityTracker = 0f // Reset velocity
                                             }
                                         },
                                         onDragCancel = {
                                             isDragging = false
+                                            // Animate back to zero smoothly on cancel
                                             coroutineScope.launch {
                                                 animate(
-                                                    initialValue = dragOffset,
-                                                    targetValue = 0f,
-                                                    animationSpec = spring(
-                                                        dampingRatio = 0.8f,
-                                                        stiffness = 500f
-                                                    )
-                                                ) { value, _ ->
-                                                    dragOffset = value
-                                                }
+                                                    initialValue = dragOffset, targetValue = 0f,
+                                                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 500f)
+                                                ) { value, _ -> dragOffset = value }
+                                                velocityTracker = 0f
                                             }
                                         },
                                         onVerticalDrag = { change, dragAmount ->
-                                            change.consume()
+                                            change.consume() // Consume the event
 
-                                            val baseResistance = 0.5f
-
-                                            val stateResistance = when (sheetState) {
-                                                EXPANDED -> if (dragAmount > 0) 1.0f else 0.0f
-                                                HALF_EXPANDED -> if (dragAmount < 0) 0.9f else 0.8f
-                                                else -> 0f
+                                            // Calculate drag resistance based on state and direction
+                                            val resistanceFactor = when {
+                                                // Stronger resistance pulling down when expanded
+                                                sheetState == EXPANDED && dragAmount > 0 -> 0.4f
+                                                // Slightly more resistance pulling up from half-expanded
+                                                sheetState == HALF_EXPANDED && dragAmount < 0 -> 0.6f
+                                                // Standard resistance pulling down from half-expanded
+                                                sheetState == HALF_EXPANDED && dragAmount > 0 -> 0.8f
+                                                else -> 1.0f // No resistance if moving towards allowed direction
                                             }
 
-                                            val progressiveFactor = 1.0f - (abs(dragOffset) / 300f).coerceIn(0f, 0.5f)
+                                            // Apply drag with resistance
+                                            val newOffset = dragOffset + dragAmount * resistanceFactor
 
-                                            velocityTracker = 0.75f * velocityTracker + 0.25f * dragAmount * 16f
+                                            // Add velocity tracking (simple moving average)
+                                            velocityTracker = 0.7f * velocityTracker + 0.3f * dragAmount * (1000f / 16f) // Rough velocity calculation
 
-                                            val effectiveResistance = baseResistance * stateResistance * progressiveFactor
-                                            dragOffset += dragAmount * effectiveResistance
+                                            // Apply moderated offset, allow slight overdrag
+                                            dragOffset = newOffset.coerceIn(-60f, screenHeight * 0.2f) // Allow some overdrag
 
-                                            dragOffset = dragOffset.coerceIn(-50f, 150f)
                                         }
                                     )
                                 }
@@ -318,10 +300,10 @@ fun AccountView(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 8.dp),
+                                    .padding(bottom = 8.dp), // Padding below handle/title
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                // Handle - Google style (thinner, less animated)
+                                // Drag Handle
                                 Box(
                                     modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
                                     contentAlignment = Alignment.Center
@@ -331,19 +313,15 @@ fun AccountView(
                                             .width(36.dp)
                                             .height(4.dp)
                                             .clip(RoundedCornerShape(2.dp))
-                                            .background(
-                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                    alpha = 0.4f
-                                                )
-                                            )
+                                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                                     )
                                 }
 
-                                // Title - Google style (simpler)
+                                // Title
                                 Text(
                                     text = "Profile",
                                     style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Medium, // Google uses medium weight
+                                    fontWeight = FontWeight.Medium,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -352,28 +330,22 @@ fun AccountView(
                             }
                         }
 
-                        // Divider - Google style (thinner)
+                        // Divider
                         HorizontalDivider(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 0.dp),
-                            thickness = 0.5.dp,
+                            modifier = Modifier.fillMaxWidth(), // No horizontal padding
+                            thickness = 0.5.dp, // Thinner divider
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                         )
 
                         // Content area
                         Box(
                             modifier = Modifier
-                                .weight(1f)
+                                .weight(1f) // Takes remaining space
                                 .fillMaxWidth()
                         ) {
                             when {
                                 isLoading -> {
-                                    // Loading state - Google style
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                         CircularProgressIndicator(
                                             color = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(40.dp),
@@ -383,68 +355,49 @@ fun AccountView(
                                 }
 
                                 errorMessage != null -> {
-                                    // Error state - Google style
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                         Column(
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             modifier = Modifier.padding(24.dp)
                                         ) {
                                             Text(
-                                                text = "Error loading profile data",
+                                                text = "Error loading profile",
                                                 color = MaterialTheme.colorScheme.error,
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Medium
                                             )
-
                                             Spacer(modifier = Modifier.height(12.dp))
-
                                             Text(
-                                                text = errorMessage ?: "",
+                                                text = errorMessage ?: "An unknown error occurred.",
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 textAlign = TextAlign.Center
                                             )
-
                                             Spacer(modifier = Modifier.height(24.dp))
-
-                                            // Google-style button
                                             Button(
                                                 onClick = {
-                                                    hapticFeedback.performHapticFeedback(
-                                                        HapticFeedback.FeedbackType.MEDIUM
-                                                    )
+                                                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
                                                     viewModel.fetchProfileData()
                                                 },
-                                                shape = RoundedCornerShape(8.dp) // Google uses less rounded corners
+                                                shape = RoundedCornerShape(8.dp)
                                             ) {
-                                                Text(
-                                                    "Retry",
-                                                    style = MaterialTheme.typography.labelLarge
-                                                )
+                                                Text("Retry", style = MaterialTheme.typography.labelLarge)
                                             }
                                         }
                                     }
                                 }
 
                                 profileData != null -> {
-                                    // Profile data - Google style layout
                                     LazyColumn(
                                         modifier = Modifier.fillMaxSize(),
-                                        contentPadding = PaddingValues(
-                                            start = 16.dp,
-                                            end = 16.dp,
-                                            top = 8.dp,
-                                            bottom = 100.dp
-                                        ),
+                                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
+                                        // Spacing between items (Sections, Buttons)
                                         verticalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
                                         item {
                                             ProfileHeader(
-                                                profileData?.studentName ?: "",
-                                                profileData?.studentID ?: ""
+                                                profileData?.studentName ?: "N/A",
+                                                profileData?.studentID ?: "N/A"
                                             )
                                         }
 
@@ -453,22 +406,10 @@ fun AccountView(
                                                 title = "Personal Information",
                                                 icon = Icons.Filled.Person,
                                                 content = {
-                                                    ProfileRow(
-                                                        label = "Name",
-                                                        value = profileData?.studentName ?: ""
-                                                    )
-                                                    ProfileRow(
-                                                        label = "Student ID",
-                                                        value = profileData?.studentID ?: ""
-                                                    )
-                                                    ProfileRow(
-                                                        label = "Date of birth",
-                                                        value = profileData?.dob ?: ""
-                                                    )
-                                                    ProfileRow(
-                                                        label = "Gender",
-                                                        value = profileData?.gender ?: ""
-                                                    )
+                                                    ProfileRow("Name", profileData?.studentName ?: "N/A")
+                                                    ProfileRow("Student ID", profileData?.studentID ?: "N/A")
+                                                    ProfileRow("Date of birth", profileData?.dob ?: "N/A")
+                                                    ProfileRow("Gender", profileData?.gender ?: "N/A")
                                                 }
                                             )
                                         }
@@ -478,98 +419,101 @@ fun AccountView(
                                                 title = "Academic Information",
                                                 icon = Icons.Filled.School,
                                                 content = {
-                                                    ProfileRow(
-                                                        label = "Degree",
-                                                        value = profileData?.degree ?: ""
-                                                    )
-                                                    ProfileRow(
-                                                        label = "Branch",
-                                                        value = profileData?.branchName ?: ""
-                                                    )
+                                                    ProfileRow("Degree", profileData?.degree ?: "N/A")
+                                                    ProfileRow("Branch", profileData?.branchName ?: "N/A")
 
+                                                    // Conditionally show Specialization
                                                     if (profileData?.specialization?.uppercase() != profileData?.branchName?.uppercase() &&
                                                         profileData?.specialization?.isNotBlank() == true
                                                     ) {
-                                                        ProfileRow(
-                                                            label = "Specialization",
-                                                            value = profileData?.specialization
-                                                                ?: ""
-                                                        )
+                                                        ProfileRow("Specialization", profileData?.specialization ?: "N/A")
                                                     }
 
-                                                    ProfileRow(
-                                                        label = "Section",
-                                                        value = profileData?.section ?: ""
-                                                    )
-
-                                                    if (profileData?.ftpt?.isNotBlank() == true) {
-                                                        ProfileRow(
-                                                            label = "Mode",
-                                                            value = profileData?.ftpt ?: ""
-                                                        )
-                                                    }
-
-                                                    if (profileData?.admission?.isNotBlank() == true) {
-                                                        ProfileRow(
-                                                            label = "Admission",
-                                                            value = profileData?.admission ?: ""
-                                                        )
-                                                    }
+                                                    ProfileRow("Section", profileData?.section ?: "N/A")
                                                 }
                                             )
                                         }
 
-                                        // Add Logout Button Section
+                                        // --- NEW: Contact Us Button Item ---
                                         item {
-                                            Spacer(modifier = Modifier.height(24.dp))
+                                            Button(
+                                                onClick = {
+                                                    // Haptic feedback for interaction
+                                                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                                                    // Create Intent to open URL
+                                                    val url = "https://nsutrack.systems"
+                                                    val intent = Intent(Intent.ACTION_VIEW)
+                                                    intent.data = Uri.parse(url)
+                                                    try {
+                                                        context.startActivity(intent)
+                                                    } catch (e: Exception) {
+                                                        // Handle cases where no browser is available or other errors
+                                                        Log.e("AccountView", "Could not launch URL $url", e)
+                                                        // Optionally show a Toast message to the user
+                                                    }
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 32.dp, vertical = 4.dp), // Match Logout style
+                                                // Bluish background, matching text color
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                                ),
+                                                shape = RoundedCornerShape(12.dp), // Match Logout style
+                                                elevation = null // Match Logout style (flat)
+                                            ) {
+                                                Text(
+                                                    text = "Contact Us",
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                        }
+                                        // --- END OF Contact Us Button Item ---
 
+
+                                        // --- Logout Button Item ---
+                                        // Spacing between this and Contact Us is handled by LazyColumn's verticalArrangement
+                                        item {
                                             Button(
                                                 onClick = {
                                                     hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
                                                     coroutineScope.launch {
                                                         viewModel.logout()
                                                         visible.targetState = false
-                                                        delay(200)
+                                                        delay(150)
                                                         onDismiss()
-                                                        onLogout() // Call the onLogout function here
+                                                        onLogout()
                                                     }
                                                 },
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                                    .padding(horizontal = 32.dp, vertical = 4.dp),
                                                 colors = ButtonDefaults.buttonColors(
-                                                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant, // Muted background
+                                                    contentColor = MaterialTheme.colorScheme.error // Red text
                                                 ),
-                                                shape = RoundedCornerShape(12.dp)
+                                                shape = RoundedCornerShape(12.dp),
+                                                elevation = null
                                             ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.ExitToApp,
-                                                    contentDescription = "Logout",
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
                                                 Text(
                                                     text = "Logout",
                                                     style = MaterialTheme.typography.labelLarge,
                                                     fontWeight = FontWeight.Medium
                                                 )
                                             }
-
-                                            // Add extra space at the bottom for better spacing
+                                            // Add space *after* the last button for bottom padding
                                             Spacer(modifier = Modifier.height(16.dp))
                                         }
+                                        // --- END OF Logout Button Item ---
                                     }
                                 }
 
-                                else -> {
-                                    // Empty state - Google style
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
+                                else -> { // Fallback if data is null
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                         Text(
-                                            text = "No profile data available",
+                                            "No profile data available.",
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             style = MaterialTheme.typography.bodyLarge
                                         )
@@ -584,6 +528,8 @@ fun AccountView(
     }
 }
 
+// --- Helper Composables (ProfileHeader, ProfileSection, ProfileRow) remain the same ---
+
 @Composable
 fun ProfileHeader(name: String, studentId: String) {
     Column(
@@ -592,31 +538,26 @@ fun ProfileHeader(name: String, studentId: String) {
             .padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Avatar in Google style - simpler animation
         var isLoaded by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) {
-            delay(100)
+            delay(100) // Short delay for animation trigger
             isLoaded = true
         }
 
         val avatarScale by animateFloatAsState(
-            targetValue = if (isLoaded) 1f else 0.9f, // Less dramatic scale
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMedium
-            ),
+            targetValue = if (isLoaded) 1f else 0.9f,
+            animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
             label = "AvatarScale"
         )
-
         val avatarAlpha by animateFloatAsState(
             targetValue = if (isLoaded) 1f else 0f,
-            animationSpec = tween(200), // Faster fade in
+            animationSpec = tween(200),
             label = "AvatarAlpha"
         )
 
         Surface(
             modifier = Modifier
-                .size(100.dp) // Google uses slightly smaller avatars
+                .size(100.dp)
                 .graphicsLayer {
                     scaleX = avatarScale
                     scaleY = avatarScale
@@ -624,13 +565,13 @@ fun ProfileHeader(name: String, studentId: String) {
                 },
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primaryContainer,
-            shadowElevation = 0.dp // Google uses less shadows
+            shadowElevation = 0.dp // Flat avatar
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
-                    text = name.take(1).uppercase(),
+                    text = name.firstOrNull()?.uppercase() ?: "?", // Safe first char
                     style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Medium, // Google uses medium weight
+                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
@@ -638,34 +579,31 @@ fun ProfileHeader(name: String, studentId: String) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Text animations - Google style (faster, simpler)
         AnimatedVisibility(
             visible = isLoaded,
-            enter = fadeIn(animationSpec = tween(200)) +
-                    slideInVertically(
-                        initialOffsetY = { -10 }, // Less dramatic slide
-                        animationSpec = tween(250, easing = EaseOutQuad)
-                    )
+            enter = fadeIn(tween(200)) + slideInVertically(
+                initialOffsetY = { -10 },
+                animationSpec = tween(250, easing = EaseOutQuad)
+            )
         ) {
             Text(
                 text = name,
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Medium, // Google uses medium weight
-                color = MaterialTheme.colorScheme.onBackground
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface // Use onSurface for primary text
             )
         }
 
         AnimatedVisibility(
             visible = isLoaded,
-            enter = fadeIn(animationSpec = tween(250, delayMillis = 50)) +
-                    expandVertically(
-                        animationSpec = tween(250, delayMillis = 50, easing = EaseOutQuad)
-                    )
+            enter = fadeIn(tween(250, 50)) + expandVertically(
+                animationSpec = tween(250, 50, easing = EaseOutQuad)
+            )
         ) {
             Text(
                 text = studentId,
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, // Secondary text color
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
@@ -676,129 +614,110 @@ fun ProfileHeader(name: String, studentId: String) {
 fun ProfileSection(
     title: String,
     icon: ImageVector,
-    content: @Composable () -> Unit
+    content: @Composable ColumnScope.() -> Unit // Use ColumnScope for content
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = 0.8f, // Less bouncy
-                    stiffness = Spring.StiffnessMedium
-                )
-            )
+            .animateContentSize(spring(0.8f, Spring.StiffnessMedium))
     ) {
-        // Section header - Google style
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp, bottom = 12.dp),
+                .padding(top = 8.dp, bottom = 12.dp), // Padding around header
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                modifier = Modifier.size(36.dp), // Smaller icon container
+                modifier = Modifier.size(36.dp),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                color = MaterialTheme.colorScheme.secondaryContainer, // Use secondary for variety
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp) // Smaller icon
-                    )
+                    Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
                 }
             }
-
             Spacer(modifier = Modifier.width(12.dp))
-
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium, // Google uses medium weight
-                color = MaterialTheme.colorScheme.onBackground
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface // Primary text color
             )
         }
 
-        // Section content - Google style cards (less rounded, less elevation)
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp), // Google uses less rounded corners
+            shape = RoundedCornerShape(12.dp), // Slightly more rounded card corners
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f) // Subtle surface variant
             ),
-            elevation = CardDefaults.cardElevation(
-                defaultElevation = 1.dp // Google uses less elevation
-            )
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat card
         ) {
             Column(
-                modifier = Modifier.padding(
-                    vertical = 8.dp,
-                    horizontal = 0.dp
-                )
+                modifier = Modifier.padding(vertical = 8.dp) // Vertical padding inside card
+                // Horizontal padding is handled by ProfileRow
             ) {
-                content()
+                content() // Inject the rows here
             }
         }
     }
 }
 
+
 @Composable
 fun ProfileRow(label: String, value: String) {
-    // Google-style staggered animation (faster, less dramatic)
     var isVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(50) // Shorter delay for faster appearance
+        delay(50) // Quick delay for stagger effect
         isVisible = true
     }
 
+    // Improved check for last rows in sections
+    val isLastInPersonal = label == "Gender"
+    val isLastInAcademic = label == "Section"
+    val isLastRow = isLastInPersonal || isLastInAcademic
+
     AnimatedVisibility(
         visible = isVisible,
-        enter = fadeIn(animationSpec = tween(200)) +
-                slideInHorizontally(
-                    initialOffsetX = { -10 }, // Less dramatic slide
-                    animationSpec = tween(200, easing = EaseOutQuad)
-                )
+        enter = fadeIn(tween(200)) + slideInHorizontally(
+            initialOffsetX = { -10 },
+            animationSpec = tween(200, easing = EaseOutQuad)
+        )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 16.dp) // Horizontal padding for row content
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 12.dp),
+                    .padding(vertical = 14.dp), // Adjusted vertical padding
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Label - Google style
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(0.35f)
+                    modifier = Modifier.weight(0.4f) // Adjust weight split if needed
                 )
-
-                // Value - Google style
                 Text(
                     text = formatProfileValue(label, value),
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Normal, // Google uses normal weight
+                    fontWeight = FontWeight.Normal, // Use Normal weight for values
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier
-                        .weight(0.65f)
+                        .weight(0.6f)
                         .padding(start = 8.dp)
                 )
             }
 
-            // Add divider if not the last element (thinner divider for Google style)
-            if (label != "Section" && label != "Admission" && label != "Mode" &&
-                label != "Gender" && label != "Category" && label != "Specialization") {
+            // Add divider conditionally, excluding the identified last rows
+            if (!isLastRow) {
                 HorizontalDivider(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 0.dp, end = 0.dp),
-                    thickness = (1.5).dp, // Google uses thicker divider0.5dp),
+                    modifier = Modifier.fillMaxWidth(), // Span full width within padding
+                    thickness = 0.5.dp, // Thin divider
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                 )
             }
@@ -806,32 +725,31 @@ fun ProfileRow(label: String, value: String) {
     }
 }
 
-// Format profile values appropriately
+// --- Utility Functions ---
+
+// Updated formatter, keeping capitalize logic but removing Mode handling
 fun formatProfileValue(label: String, value: String): String {
+    if (value.isBlank() || value.equals("N/A", ignoreCase = true)) return "N/A" // Handle empty/NA case
+
     return when (label) {
-        "Student ID" -> value  // Keep student ID as is
-        "Specialization" -> {
+        "Student ID" -> value // Keep as is
+        "Specialization" -> { // Handle specific capitalization like VLSI
             if (value.uppercase().contains("VLSI")) {
-                // Handle VLSI case (keep VLSI in uppercase)
                 value.split(" ").joinToString(" ") { word ->
-                    if (word.uppercase() == "VLSI") "VLSI" else word.lowercase().capitalize()
+                    if (word.uppercase() == "VLSI") "VLSI" else word.lowercase().capitalizeWord()
                 }
             } else {
-                value.lowercase().capitalize()
+                value.lowercase().capitalizeWord() // Capitalize first letter
             }
         }
-        "Mode" -> {
-            when (value.uppercase()) {
-                "FT" -> "Full Time"
-                "PT" -> "Part Time"
-                else -> value.lowercase().capitalize()
-            }
-        }
-        else -> value.lowercase().capitalize()  // Capitalize other values
+        // Removed "Mode" case
+        else -> value.lowercase().capitalizeWord() // Default: Capitalize first letter
     }
 }
 
-// Extension functions for string capitalization
-fun String.capitalize(): String {
+// Renamed extension function for clarity
+fun String.capitalizeWord(): String {
     return this.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 }
+
+// REMOVED Placeholder HapticFeedback object - Ensure you have a real implementation or import
