@@ -122,7 +122,7 @@ class WebViewActivity : AppCompatActivity() {
                 startActivity(intent)
                 // Hide progress bar
                 progressBar.visibility = View.GONE
-                // Optional: close this activity after launching the file
+
                 finish()
             } catch (e: android.content.ActivityNotFoundException) {
                 // No app can handle this file type
