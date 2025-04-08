@@ -1,368 +1,603 @@
 package com.nsutrack.nsuttrial
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.yourname.nsutrack.data.model.AttendanceRecord
-import com.yourname.nsutrack.data.model.LoginRequest
-import com.google.gson.Gson
-import com.google.gson.JsonObject
-import com.google.gson.reflect.TypeToken
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
-import okhttp3.ResponseBody
-import retrofit2.HttpException
-import java.io.IOException
-import android.util.Log
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.edit
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
+import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
-import com.nsutrack.nsuttrial.ui.theme.generateConsistentColor
+import com.google.gson.reflect.TypeToken
+import com.nsutrack.nsuttrial.ui.theme.generateConsistentColor // Assuming this exists
+import com.yourname.nsutrack.data.model.AttendanceRecord // Assuming this exists
+import com.yourname.nsutrack.data.model.LoginRequest // Assuming this exists
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async // Added import
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope // Added import
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import okhttp3.ResponseBody // Keep if apiService returns this directly
+import retrofit2.HttpException // Keep for error handling
+import retrofit2.http.Body
+import retrofit2.http.GET
+import retrofit2.http.POST
+import retrofit2.http.Query
+import retrofit2.http.Streaming
+import java.io.IOException
 import java.util.Calendar
+import kotlin.math.ceil // Keep if used in calculation helpers
+import kotlin.math.min // Added for JSON preview
+
+// Assume RetrofitClient and ApiService are correctly defined elsewhere
+// object RetrofitClient { val apiService: ApiService = ... }
+// interface ApiService { ... }
 
 class AttendanceViewModel : ViewModel() {
-    // Tag for logging
     private val TAG = "AttendanceViewModel"
+    private val apiService = RetrofitClient.apiService // Ensure this is initialized
 
-    // Initialize API Service
-    private val apiService = RetrofitClient.apiService
-
-    // State Flows
+    // State Flows for UI
     private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow() // Main loading state for pull-refresh
 
     private val _errorMessage = MutableStateFlow("")
-    val errorMessage: StateFlow<String> = _errorMessage
+    val errorMessage: StateFlow<String> = _errorMessage.asStateFlow()
 
     private val _sessionId = MutableStateFlow<String?>(null)
-    val sessionId: StateFlow<String?> = _sessionId
+    val sessionId: StateFlow<String?> = _sessionId.asStateFlow()
 
     private val _isLoginInProgress = MutableStateFlow(false)
-    val isLoginInProgress: StateFlow<Boolean> = _isLoginInProgress
+    val isLoginInProgress: StateFlow<Boolean> = _isLoginInProgress.asStateFlow()
 
     private val _isSessionInitialized = MutableStateFlow(false)
-    val isSessionInitialized: StateFlow<Boolean> = _isSessionInitialized
+    val isSessionInitialized: StateFlow<Boolean> = _isSessionInitialized.asStateFlow()
 
     private val _isLoggedIn = MutableStateFlow(false)
-    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn
+    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
     private val _subjectData = MutableStateFlow<List<SubjectData>>(emptyList())
-    val subjectData: StateFlow<List<SubjectData>> = _subjectData
+    val subjectData: StateFlow<List<SubjectData>> = _subjectData.asStateFlow()
 
     private val _isAttendanceDataLoaded = MutableStateFlow(false)
-    val isAttendanceDataLoaded: StateFlow<Boolean> = _isAttendanceDataLoaded
+    val isAttendanceDataLoaded: StateFlow<Boolean> = _isAttendanceDataLoaded.asStateFlow()
 
-    // Profile data fields
+    // Profile specific states
     private val _isProfileLoading = MutableStateFlow(false)
-    val isProfileLoading: StateFlow<Boolean> = _isProfileLoading
-
+    val isProfileLoading: StateFlow<Boolean> = _isProfileLoading.asStateFlow()
     private val _profileData = MutableStateFlow<ProfileData?>(null)
-    val profileData: StateFlow<ProfileData?> = _profileData
-
+    val profileData: StateFlow<ProfileData?> = _profileData.asStateFlow()
     private val _profileError = MutableStateFlow<String?>(null)
-    val profileError: StateFlow<String?> = _profileError
+    val profileError: StateFlow<String?> = _profileError.asStateFlow()
 
-    // Timetable data fields
+    // Timetable specific states
     private val _isTimetableLoading = MutableStateFlow(false)
-    val isTimetableLoading: StateFlow<Boolean> = _isTimetableLoading
-
+    val isTimetableLoading: StateFlow<Boolean> = _isTimetableLoading.asStateFlow()
     private val _timetableData = MutableStateFlow<TimetableData?>(null)
-    val timetableData: StateFlow<TimetableData?> = _timetableData
-
+    val timetableData: StateFlow<TimetableData?> = _timetableData.asStateFlow()
     private val _timetableError = MutableStateFlow<String?>(null)
-    val timetableError: StateFlow<String?> = _timetableError
+    val timetableError: StateFlow<String?> = _timetableError.asStateFlow()
 
-    // Theme preference state
+    // Theme preference state (if used)
     private val _useDynamicColors = MutableStateFlow(true)
-    val useDynamicColors: StateFlow<Boolean> = _useDynamicColors
+    val useDynamicColors: StateFlow<Boolean> = _useDynamicColors.asStateFlow()
 
+    // Logout completion signal (if needed)
     private val _logoutCompleted = MutableStateFlow(false)
-    val logoutCompleted: StateFlow<Boolean> = _logoutCompleted
+    val logoutCompleted: StateFlow<Boolean> = _logoutCompleted.asStateFlow()
 
-
-
-    // Stored credentials for auto-refresh
+    // Stored credentials
     private val _storedUsername = MutableStateFlow<String?>(null)
     private val _storedPassword = MutableStateFlow<String?>(null)
     private var sharedPreferences: SharedPreferences? = null
 
-    // Keep track of active jobs
+    // Active job tracking
     private var activeLoginJob: Job? = null
     private var activeAttendanceJob: Job? = null
     private var activeProfileJob: Job? = null
     private var activeTimetableJob: Job? = null
 
-    // Initialize session when ViewModel is created
     init {
         Log.d(TAG, "ViewModel initialized")
-        initializeSession()
+        // Avoid auto-initializing session here; let SharedPreferences init or refresh handle it.
     }
 
-    // Initialize shared preferences for credential storage
     fun initializeSharedPreferences(context: Context) {
-        sharedPreferences = context.getSharedPreferences("nsu_credentials", Context.MODE_PRIVATE)
-        // Load stored credentials if available
-        val username = sharedPreferences?.getString("username", null)
-        val password = sharedPreferences?.getString("password", null)
-        _storedUsername.value = username
-        _storedPassword.value = password
+        if (sharedPreferences == null) { // Initialize only once
+            sharedPreferences = context.getSharedPreferences("nsu_credentials", Context.MODE_PRIVATE)
+            val username = sharedPreferences?.getString("username", null)
+            val password = sharedPreferences?.getString("password", null)
+            _storedUsername.value = username
+            _storedPassword.value = password
+            Log.d(TAG, "SharedPreferences initialized, credentials ${if (username != null) "found" else "not found"}")
 
-        Log.d(TAG, "SharedPreferences initialized, credentials ${if (username != null) "found" else "not found"}")
+            // If credentials exist, try to initialize session silently on startup
+            if (hasStoredCredentials() && _sessionId.value == null) {
+                Log.d(TAG, "Credentials found on init, initializing session.")
+                initializeSession()
+            }
+        }
     }
 
-    // Set dynamic color preference
+    // --- START: NEW Pull-to-Refresh Function ---
+    fun performPullToRefresh() {
+        viewModelScope.launch {
+            Log.i(TAG, "Pull-to-Refresh triggered.")
+            _isLoading.value = true // Show pull-refresh indicator immediately
+            _errorMessage.value = "" // Clear previous errors
+            _profileError.value = null // Clear specific errors
+            _timetableError.value = null // Clear specific errors
+
+            try {
+                // 1. Cancel any ongoing network requests
+                Log.d(TAG, "[Refresh] Cancelling ongoing requests...")
+                cancelRequests()
+                delay(100) // Short delay to ensure cancellation propagates
+
+                // 2. Initialize a new session
+                Log.d(TAG, "[Refresh] Initializing new session...")
+                try {
+                    val sessionResponse = apiService.getSessionId()
+                    _sessionId.value = sessionResponse.session_id
+                    _isSessionInitialized.value = true
+                    Log.d(TAG, "[Refresh] New session initialized with ID: ${sessionResponse.session_id}")
+                } catch (sessionError: Exception) {
+                    Log.e(TAG, "[Refresh] Session initialization failed: ${sessionError.message}")
+                    _errorMessage.value = "Connection error during refresh. Please try again."
+                    _isLoading.value = false // Hide indicator on failure
+                    return@launch // Stop refresh process
+                }
+
+                val currentSessionId = _sessionId.value
+                if (currentSessionId == null) {
+                    Log.e(TAG, "[Refresh] Failed: No session ID available after initialization.")
+                    _errorMessage.value = "Failed to establish session for refresh."
+                    _isLoading.value = false // Hide indicator
+                    return@launch // Stop refresh process
+                }
+
+                // 3. Retrieve saved credentials
+                Log.d(TAG, "[Refresh] Retrieving stored credentials...")
+                val credentials = getStoredCredentials()
+                if (credentials == null) {
+                    Log.w(TAG, "[Refresh] No stored credentials found. Cannot re-authenticate.")
+                    _errorMessage.value = "Please log in to refresh data."
+                    _isLoggedIn.value = false
+                    _isLoading.value = false // Hide indicator
+                    clearAllData() // Clear potentially stale data
+                    return@launch // Stop refresh process
+                }
+                val (username, password) = credentials
+
+                // 4. Submit credentials to the backend
+                Log.d(TAG, "[Refresh] Submitting credentials with session ID: $currentSessionId...")
+                try {
+                    val loginResponse = apiService.login(
+                        LoginRequest(
+                            session_id = currentSessionId,
+                            uid = username,
+                            pwd = password
+                        )
+                    )
+                    if (!loginResponse.isSuccessful) {
+                        throw IOException("Re-authentication failed (HTTP ${loginResponse.code()})")
+                    }
+                    Log.d(TAG, "[Refresh] Credentials submitted successfully.")
+
+                    // Check for application-level login errors
+                    var retryCount = 0
+                    var loginErrorFound = false
+                    while (retryCount < 3 && !loginErrorFound) {
+                        delay(300)
+                        val checkSessionId = _sessionId.value ?: break // Use current ID
+                        val errorResponse = apiService.checkLoginErrors(checkSessionId)
+                        if (errorResponse.has("error")) {
+                            val serverErrorMessage = errorResponse.get("error").asString
+                            Log.e(TAG, "[Refresh] Login error reported by server: $serverErrorMessage")
+                            _errorMessage.value = serverErrorMessage
+                            loginErrorFound = true
+                            if (errorResponse.has("new_session_id")) {
+                                _sessionId.value = errorResponse.get("new_session_id").asString
+                                Log.d(TAG, "[Refresh] Received new session ID during error check: ${_sessionId.value}")
+                            }
+                        } else if (errorResponse.has("status") && errorResponse.get("status").asString == "no_errors") {
+                            Log.d(TAG, "[Refresh] No login errors found by server.")
+                            _isLoggedIn.value = true
+                            break
+                        }
+                        retryCount++
+                    }
+
+                    if (loginErrorFound || !_isLoggedIn.value) { // Check if error found OR login wasn't confirmed
+                        if (!loginErrorFound) _errorMessage.value = "Login verification failed."
+                        _isLoggedIn.value = false
+                        _isLoading.value = false
+                        clearAllData()
+                        return@launch
+                    }
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "[Refresh] Error during credential submission: ${e.message}")
+                    _errorMessage.value = "Authentication failed: ${e.message?.take(100)}" // Limit error message length
+                    _isLoggedIn.value = false
+                    _isLoading.value = false
+                    return@launch
+                }
+
+                // --- At this point, re-authentication is successful ---
+
+                // 5. Wait for attendance data to load (Fetch sequentially first)
+                Log.d(TAG, "[Refresh] Fetching attendance data...")
+                try {
+                    val attendanceSessionId = _sessionId.value ?: throw IOException("Session ID became null before attendance fetch")
+                    val attendanceResponse = apiService.getAttendanceData(attendanceSessionId)
+                    if (attendanceResponse.isSuccessful && attendanceResponse.body() != null) {
+                        val responseBody = attendanceResponse.body()?.string() ?: ""
+                        val dataPrefix = "data: "
+                        if (responseBody.contains(dataPrefix)) {
+                            val jsonData = responseBody.substringAfter(dataPrefix).substringBefore("\n")
+                            parseAttendanceData(jsonData)
+                            _isAttendanceDataLoaded.value = true
+                            Log.d(TAG, "[Refresh] Attendance data fetched successfully.")
+                        } else {
+                            throw IOException("Invalid SSE format for attendance")
+                        }
+                    } else {
+                        throw IOException("Failed to get attendance (HTTP ${attendanceResponse.code()})")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "[Refresh] Error fetching/parsing attendance: ${e.message}")
+                    _errorMessage.value = "Failed to load attendance: ${e.message?.take(100)}"
+                    _isAttendanceDataLoaded.value = false
+                    // Decide whether to stop or continue to profile/timetable
+                    // Let's continue for now to potentially get other data
+                }
+
+                // 6. Load profile and timetable data in parallel
+                Log.d(TAG, "[Refresh] Fetching profile and timetable data in parallel...")
+                coroutineScope { // Use a coroutineScope to manage parallel jobs
+                    val profileJob = async { fetchProfileDataInternal() } // Launch async
+                    val timetableJob = async { fetchTimetableDataInternal(forceRefresh = true) } // Launch async
+
+                    profileJob.await() // Wait for profile job to complete (or throw exception)
+                    timetableJob.await() // Wait for timetable job to complete (or throw exception)
+                }
+                Log.d(TAG, "[Refresh] Profile and timetable fetches finished.")
+
+            } catch (e: Exception) {
+                // Catch any unexpected errors during the refresh flow
+                Log.e(TAG, "[Refresh] Unexpected error: ${e.message}", e)
+                _errorMessage.value = "An unexpected error occurred."
+            } finally {
+                // IMPORTANT: Ensure loading indicator is hidden
+                Log.i(TAG, "[Refresh] Refresh process finished. Hiding indicator.")
+                _isLoading.value = false
+            }
+        }
+    }
+    // --- END: NEW Pull-to-Refresh Function ---
+
+    // --- Existing Functions (Modified slightly for internal use/clarity) ---
+
     fun setDynamicColorPreference(useDynamic: Boolean) {
         _useDynamicColors.value = useDynamic
     }
 
-    // Step 1: Initialize session
+    // Initializes session, typically called on startup if credentials exist
     fun initializeSession() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _errorMessage.value = ""
-            _isSessionInitialized.value = false
+        if (_isSessionInitialized.value || activeLoginJob?.isActive == true) return // Avoid redundant calls
 
+        viewModelScope.launch {
+            _isSessionInitialized.value = false // Reset flag during init attempt
             try {
                 Log.d(TAG, "Initializing session...")
-                // Get session ID from server
                 val sessionResponse = apiService.getSessionId()
                 _sessionId.value = sessionResponse.session_id
                 _isSessionInitialized.value = true
                 Log.d(TAG, "Session initialized with ID: ${sessionResponse.session_id}")
-
             } catch (e: Exception) {
                 Log.e(TAG, "Session initialization failed: ${e.message}")
-                _errorMessage.value = "Failed to initialize session: ${e.message}"
-            } finally {
-                _isLoading.value = false
+                _errorMessage.value = "Failed to connect: ${e.message?.take(100)}" // Show connection error
+                _isSessionInitialized.value = false
+                _sessionId.value = null
             }
         }
     }
 
-    // Step 4: Submit credentials
     fun login(username: String, password: String) {
-        // Store credentials for future refreshes
+        if (_isLoginInProgress.value) return // Prevent multiple login attempts
+
         _storedUsername.value = username
         _storedPassword.value = password
-
-        // Save to SharedPreferences
         sharedPreferences?.edit {
             putString("username", username)
             putString("password", password)
             apply()
+            Log.d(TAG, "Stored credentials.")
         }
 
-        Log.d(TAG, "Stored credentials for future refreshes")
-
-        // Cancel previous login attempt if any
-        activeLoginJob?.cancel()
-
+        activeLoginJob?.cancel() // Cancel previous login attempt
         activeLoginJob = viewModelScope.launch {
-            val currentSessionId = _sessionId.value
-            if (currentSessionId == null) {
-                Log.e(TAG, "Login failed: No session ID available")
-                _errorMessage.value = "Session not initialized. Please try again."
-                return@launch
-            }
-
-            Log.d(TAG, "Starting login with session ID: $currentSessionId")
             _isLoginInProgress.value = true
-            _isLoading.value = true
+            _isLoading.value = true // Show general loading during login
             _errorMessage.value = ""
+            _profileError.value = null
+            _timetableError.value = null
 
             try {
-                // Submit credentials to server
-                val loginResponse = apiService.login(
-                    LoginRequest(
-                        session_id = currentSessionId,
-                        uid = username,
-                        pwd = password
-                    )
-                )
+                // Ensure session is initialized
+                if (!_isSessionInitialized.value || _sessionId.value == null) {
+                    Log.d(TAG, "Session not ready for login, initializing...")
+                    initializeSession()
+                    delay(1500) // Wait for session init
+                    if (!_isSessionInitialized.value || _sessionId.value == null) {
+                        throw IOException("Connection error. Please try again.")
+                    }
+                }
+                val currentSessionId = _sessionId.value!!
 
+                Log.d(TAG, "Starting login with session ID: $currentSessionId")
+                val loginResponse = apiService.login(
+                    LoginRequest(session_id = currentSessionId, uid = username, pwd = password)
+                )
                 if (!loginResponse.isSuccessful) {
-                    throw IOException("Login failed with code: ${loginResponse.code()}")
+                    throw IOException("Login failed (HTTP ${loginResponse.code()})")
                 }
 
-                Log.d(TAG, "Credentials submitted successfully, checking for errors...")
-
-                // Check for credential errors
+                // Check for errors
                 var retryCount = 0
                 var errorFound = false
-
+                var loggedInConfirmed = false
                 while (retryCount < 3) {
-                    val currentId = _sessionId.value ?: break
-                    val errorResponse = apiService.checkLoginErrors(currentId)
-
+                    delay(300)
+                    val checkSessionId = _sessionId.value ?: break
+                    val errorResponse = apiService.checkLoginErrors(checkSessionId)
                     if (errorResponse.has("error")) {
-                        // Handle invalid credentials
-                        val errorMessage = errorResponse.get("error").asString
-                        Log.e(TAG, "Login error: $errorMessage")
-
-                        if (errorResponse.has("new_session_id")) {
-                            val newSessionId = errorResponse.get("new_session_id").asString
-                            Log.d(TAG, "Received new session ID: $newSessionId")
-                            _sessionId.value = newSessionId
-                            _isSessionInitialized.value = true
-                        }
-
-                        _errorMessage.value = errorMessage
+                        val serverErrorMessage = errorResponse.get("error").asString
+                        Log.e(TAG, "Login error: $serverErrorMessage")
+                        _errorMessage.value = serverErrorMessage
                         errorFound = true
+                        if (errorResponse.has("new_session_id")) {
+                            _sessionId.value = errorResponse.get("new_session_id").asString
+                            Log.d(TAG, "Received new session ID during error check: ${_sessionId.value}")
+                        }
+                        break // Treat server error as final
+                    } else if (errorResponse.has("status") && errorResponse.get("status").asString == "no_errors") {
+                        Log.d(TAG, "No login errors found.")
+                        loggedInConfirmed = true
+                        _isLoggedIn.value = true
                         break
                     }
-
-                    // If no errors found, we can proceed to fetch attendance
-                    if (errorResponse.has("status") && errorResponse.get("status").asString == "no_errors") {
-                        Log.d(TAG, "No login errors found, proceeding to fetch attendance data")
-                        break
-                    }
-
-                    delay(300) // Brief delay before checking again
                     retryCount++
                 }
 
-                // If no errors, fetch attendance data
-                if (!errorFound) {
-                    Log.d(TAG, "Login successful, session ID before fetching data: ${_sessionId.value}")
-                    _isLoggedIn.value = true
-                    fetchAttendanceData()
+                if (errorFound || !loggedInConfirmed) {
+                    if (!errorFound) _errorMessage.value = "Login verification failed."
+                    _isLoggedIn.value = false
+                    throw IOException(_errorMessage.value.ifEmpty { "Login failed after checks" })
                 }
 
+                // Fetch data sequentially after successful login confirmation
+                Log.d(TAG, "Login successful, fetching data...")
+                fetchAttendanceDataInternal() // Fetch attendance first and wait
+                _isAttendanceDataLoaded.value = true // Assume loaded if no exception
+
+                // Fetch profile and timetable in parallel
+                coroutineScope {
+                    val profileJob = async { fetchProfileDataInternal() }
+                    val timetableJob = async { fetchTimetableDataInternal(forceRefresh = false) } // No force on initial login
+                    profileJob.await()
+                    timetableJob.await()
+                }
+                Log.d(TAG, "Initial data fetch complete after login.")
+
             } catch (e: Exception) {
-                Log.e(TAG, "Login error: ${e.message}")
-                _errorMessage.value = "Login error: ${e.message}"
+                Log.e(TAG, "Login process error: ${e.message}", e)
+                if (_errorMessage.value.isEmpty()) {
+                    _errorMessage.value = "Login error: ${e.message?.take(100)}"
+                }
+                _isLoggedIn.value = false
+                clearAllData() // Clear data on login failure
+            } finally {
                 _isLoginInProgress.value = false
-                _isLoading.value = false
+                _isLoading.value = false // Turn off general loading
             }
         }
     }
 
-    // Fetch attendance data after successful login
-    private suspend fun fetchAttendanceData() {
-        if (activeAttendanceJob != null) {
-            activeAttendanceJob?.cancelAndJoin()
+    // Internal function to fetch attendance, used by login/refresh
+    private suspend fun fetchAttendanceDataInternal() {
+        val currentJob = activeAttendanceJob
+        if (currentJob != null && currentJob.isActive) {
+            Log.d(TAG, "Waiting for existing attendance job to complete.")
+            currentJob.join() // Wait if already running
+            return // Don't start a new one if previous one just finished
         }
 
-        activeAttendanceJob = viewModelScope.launch {
+        val job = viewModelScope.launch {
+            // No _isLoading manipulation here; caller manages it.
+            _isAttendanceDataLoaded.value = false // Reset loaded flag
             try {
-                val currentSessionId = _sessionId.value
-                if (currentSessionId == null) {
-                    Log.e(TAG, "Cannot fetch attendance: Session ID not available")
-                    throw IOException("Session ID not available")
-                }
-
+                val currentSessionId = _sessionId.value ?: throw IOException("Session ID missing")
                 Log.d(TAG, "Fetching attendance data with session ID: $currentSessionId")
 
-                // Get attendance data using SSE
                 val attendanceResponse = apiService.getAttendanceData(currentSessionId)
-
                 if (attendanceResponse.isSuccessful && attendanceResponse.body() != null) {
-                    // Process the response
                     val responseBody = attendanceResponse.body()?.string() ?: ""
-                    Log.d(TAG, "Received attendance data response of length: ${responseBody.length}")
-
-                    // SSE responses are formatted as "data: {json}\n\n"
                     val dataPrefix = "data: "
                     if (responseBody.contains(dataPrefix)) {
                         val jsonData = responseBody.substringAfter(dataPrefix).substringBefore("\n")
-                        Log.d(TAG, "Extracted JSON data of length: ${jsonData.length}")
-
-                        // Parse the attendance data
-                        parseAttendanceData(jsonData)
-
-                        _isAttendanceDataLoaded.value = true
-                        Log.d(TAG, "Attendance data loaded successfully")
-
-                        // Also fetch profile data after successful attendance data
-                        fetchProfileData()
-
-                        // Also fetch timetable data
-                        fetchTimetableData()
+                        parseAttendanceData(jsonData) // Parse the data
+                        // _isAttendanceDataLoaded is set based on successful parsing within parseAttendanceData indirectly
                     } else {
-                        throw IOException("Invalid SSE format in response")
+                        throw IOException("Invalid SSE format for attendance")
                     }
                 } else {
-                    Log.e(TAG, "Failed to get attendance data: ${attendanceResponse.code()}")
-                    throw IOException("Failed to get attendance data: ${attendanceResponse.code()}")
+                    throw IOException("Fetch attendance failed (HTTP ${attendanceResponse.code()})")
                 }
-
             } catch (e: Exception) {
-                Log.e(TAG, "Error fetching attendance data: ${e.message}")
-                _errorMessage.value = "Error fetching attendance data: ${e.message}"
+                Log.e(TAG, "Error fetching/parsing attendance: ${e.message}")
+                _errorMessage.value = "Error loading attendance: ${e.message?.take(100)}"
+                _subjectData.value = emptyList() // Clear data on error
+                _isAttendanceDataLoaded.value = false
+                throw e // Re-throw to signal failure to caller (e.g., refresh)
             } finally {
-                _isLoginInProgress.value = false
-                _isLoading.value = false
-                activeAttendanceJob = null
+                activeAttendanceJob = null // Clear job reference when done
             }
         }
+        activeAttendanceJob = job
+        job.join() // Wait for this fetch to complete before proceeding in the calling function
+        Log.d(TAG, "fetchAttendanceDataInternal finished.")
     }
 
-    // Parse attendance data
+    // Renamed public function for clarity, delegates to internal
+    fun fetchProfileData() {
+        viewModelScope.launch { fetchProfileDataInternal() }
+    }
+
+    // Internal function to fetch profile, managing its own state
+    private suspend fun fetchProfileDataInternal() {
+        if (activeProfileJob?.isActive == true) {
+            Log.d(TAG, "Profile fetch already in progress.")
+            activeProfileJob?.join() // Wait for existing job
+            return
+        }
+        val job = viewModelScope.launch {
+            _isProfileLoading.value = true
+            _profileError.value = null
+            Log.d(TAG,"Starting internal profile fetch.")
+            try {
+                val currentSessionId = _sessionId.value ?: throw IOException("Session ID missing")
+                Log.d(TAG, "Fetching profile data with session ID: $currentSessionId")
+
+                val profileResponse = apiService.getProfileData(currentSessionId)
+                if (profileResponse.isSuccessful && profileResponse.body() != null) {
+                    val responseBody = profileResponse.body()?.string() ?: ""
+                    val dataPrefix = "data: "
+                    if (responseBody.contains(dataPrefix)) {
+                        val jsonData = responseBody.substringAfter(dataPrefix).substringBefore("\n")
+                        parseProfileDataJson(jsonData) // Use helper to parse
+                    } else {
+                        throw IOException("Invalid SSE format for profile")
+                    }
+                } else {
+                    throw IOException("Fetch profile failed (HTTP ${profileResponse.code()})")
+                }
+                Log.d(TAG,"Internal profile fetch success.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching profile: ${e.message}")
+                _profileError.value = "Error loading profile: ${e.message?.take(100)}"
+                _profileData.value = null // Clear data on error
+                throw e // Re-throw
+            } finally {
+                _isProfileLoading.value = false
+                activeProfileJob = null
+                Log.d(TAG,"Internal profile fetch finished.")
+            }
+        }
+        activeProfileJob = job
+        job.join() // Wait for completion
+    }
+
+    // Renamed public function for clarity, delegates to internal
+    fun fetchTimetableData(forceRefresh: Boolean = false) {
+        viewModelScope.launch { fetchTimetableDataInternal(forceRefresh) }
+    }
+
+    // Internal function to fetch timetable, managing its own state
+    private suspend fun fetchTimetableDataInternal(forceRefresh: Boolean = false) {
+        val currentData = _timetableData.value
+        if (!forceRefresh && currentData != null && !currentData.isStale()) {
+            Log.d(TAG, "Using cached timetable data.")
+            return
+        }
+        if (activeTimetableJob?.isActive == true) {
+            Log.d(TAG, "Timetable fetch already in progress.")
+            activeTimetableJob?.join() // Wait for existing job
+            return
+        }
+
+        val job = viewModelScope.launch {
+            _isTimetableLoading.value = true
+            _timetableError.value = null
+            Log.d(TAG,"Starting internal timetable fetch (force: $forceRefresh).")
+            try {
+                val currentSessionId = _sessionId.value ?: throw IOException("Session ID missing")
+                Log.d(TAG, "Fetching timetable data with session ID: $currentSessionId")
+
+                val timetableResponse = apiService.getTimetableData(currentSessionId)
+                if (timetableResponse.isSuccessful && timetableResponse.body() != null) {
+                    val responseBody = timetableResponse.body()?.string() ?: ""
+                    val dataPrefix = "data: "
+                    if (responseBody.contains(dataPrefix)) {
+                        val jsonData = responseBody.substringAfter(dataPrefix).substringBefore("\n")
+                        parseTimetableDataJson(jsonData) // Use helper to parse
+                    } else {
+                        throw IOException("Invalid SSE format for timetable")
+                    }
+                } else {
+                    throw IOException("Fetch timetable failed (HTTP ${timetableResponse.code()})")
+                }
+                Log.d(TAG,"Internal timetable fetch success.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching timetable: ${e.message}", e)
+                _timetableError.value = "Error loading timetable: ${e.message?.take(100)}"
+                _timetableData.value = null // Clear data on error
+                throw e // Re-throw
+            } finally {
+                _isTimetableLoading.value = false
+                activeTimetableJob = null
+                Log.d(TAG,"Internal timetable fetch finished.")
+            }
+        }
+        activeTimetableJob = job
+        job.join() // Wait for completion
+    }
+
+    // --- Parsing Logic ---
+
     private fun parseAttendanceData(jsonData: String) {
         try {
-            Log.d(TAG, "Parsing attendance data")
-
-            // First, check what kind of data we're getting
+            Log.d(TAG, "Parsing attendance data...")
             val rawJsonString = jsonData.trim()
-
-            // Log the first part of the JSON to debug
-            val previewLength = minOf(100, rawJsonString.length)
-            Log.d(TAG, "JSON data preview: ${rawJsonString.substring(0, previewLength)}...")
-
             val gson = Gson()
 
-            if (rawJsonString.startsWith("{")) {
-                // We received an object, not the expected array
-                Log.d(TAG, "Received JSON object instead of array, trying AttendanceResponse format")
-
+            if (rawJsonString.startsWith("{")) { // New Object Format
+                Log.d(TAG, "Parsing as AttendanceResponse object.")
                 val response = gson.fromJson(rawJsonString, AttendanceResponse::class.java)
-
-                // Convert the API response to our internal model
                 val subjects = response.subjects.map { apiSubject ->
-                    // Convert ApiRecord to AttendanceRecord
                     val records = apiSubject.records.map { apiRecord ->
-                        AttendanceRecord(
-                            date = apiRecord.date,
-                            status = apiRecord.status
-                        )
+                        AttendanceRecord(date = apiRecord.date, status = apiRecord.status)
                     }
-
-                    // Calculate attendance percentage
                     val percentage = if (apiSubject.total_classes > 0) {
                         (apiSubject.present.toFloat() / apiSubject.total_classes) * 100
-                    } else {
-                        0f
-                    }
-
+                    } else 0f
                     SubjectData(
-                        code = apiSubject.code,
-                        name = apiSubject.name,
+                        code = apiSubject.code, name = apiSubject.name,
                         attendancePercentage = percentage,
                         overallClasses = apiSubject.total_classes,
-                        overallPresent = apiSubject.present,
-                        overallAbsent = apiSubject.absent,
+                        overallPresent = apiSubject.present, overallAbsent = apiSubject.absent,
                         records = records
                     )
                 }
-
-                Log.d(TAG, "Successfully parsed ${subjects.size} subjects from AttendanceResponse")
+                Log.d(TAG, "Parsed ${subjects.size} subjects from AttendanceResponse.")
                 _subjectData.value = subjects
+                _isAttendanceDataLoaded.value = true // Mark as loaded
 
-            } else if (rawJsonString.startsWith("[")) {
-                // Original parsing logic for array format
-                Log.d(TAG, "Received JSON array, using original parsing logic")
-
+            } else if (rawJsonString.startsWith("[")) { // Legacy Array Format
+                Log.d(TAG, "Parsing as legacy List<List<String>> array.")
                 val typeToken = object : TypeToken<List<List<String>>>() {}.type
                 val rawAttendanceData: List<List<String>> = gson.fromJson(jsonData, typeToken)
 
-                // Variables to store important rows
+                // ... (Keep your existing legacy array parsing logic here) ...
                 var subjectCodesRow: List<String>? = null
                 var overallClassesRow: List<String>? = null
                 var overallPresentRow: List<String>? = null
@@ -370,37 +605,26 @@ class AttendanceViewModel : ViewModel() {
                 var subjectMappingRow: String = ""
                 val dateWiseRecords = mutableListOf<Pair<String, List<String>>>()
 
-                // First pass: identify important rows
                 for (row in rawAttendanceData) {
                     if (row.isEmpty()) continue
-
                     when (row[0]) {
                         "Days" -> subjectCodesRow = row
                         "Overall Class" -> overallClassesRow = row
                         "Overall  Present" -> overallPresentRow = row
                         "Overall Absent" -> overallAbsentRow = row
                     }
-
-                    // Save date-wise records (rows starting with dates)
                     if (row[0].contains("-") && !row[0].contains("FCCS")) {
                         val date = row[0]
                         val records = row.subList(1, row.size)
                         dateWiseRecords.add(Pair(date, records))
                     }
                 }
-
-                // Get subject mapping from last row
                 if (rawAttendanceData.isNotEmpty() && rawAttendanceData.last().isNotEmpty()) {
                     subjectMappingRow = rawAttendanceData.last()[0]
                 }
-
-                // Extract subject codes
                 val subjectCodes = subjectCodesRow?.drop(1) ?: emptyList()
-                Log.d(TAG, "Found ${subjectCodes.size} subject codes")
-
-                // Create subject map
                 val subjectMap = mutableMapOf<String, String>()
-
+                // ... (logic to populate subjectMap) ...
                 for (code in subjectCodes) {
                     val codePos = subjectMappingRow.indexOf("$code-")
                     if (codePos >= 0) {
@@ -414,7 +638,6 @@ class AttendanceViewModel : ViewModel() {
                                 }
                             }
                         }
-
                         if (startPos < endPos) {
                             val name = subjectMappingRow.substring(startPos, endPos).trim()
                             subjectMap[code] = name
@@ -422,565 +645,171 @@ class AttendanceViewModel : ViewModel() {
                     }
                 }
 
-                // Process data for each subject
-                val subjects = mutableListOf<SubjectData>()
 
+                val subjects = mutableListOf<SubjectData>()
                 for (i in subjectCodes.indices) {
                     val code = subjectCodes[i]
                     val overallClasses = overallClassesRow?.getOrNull(i + 1)?.toIntOrNull() ?: 0
                     val overallPresent = overallPresentRow?.getOrNull(i + 1)?.toIntOrNull() ?: 0
                     val overallAbsent = overallAbsentRow?.getOrNull(i + 1)?.toIntOrNull() ?: 0
-
-                    // Get subject name
                     val name = subjectMap[code] ?: code
-
-                    // Process attendance records
                     val records = mutableListOf<AttendanceRecord>()
-
                     for ((date, statuses) in dateWiseRecords) {
                         if (i < statuses.size) {
-                            records.add(
-                                AttendanceRecord(
-                                    date = date,
-                                    status = statuses[i]
-                                )
-                            )
+                            records.add(AttendanceRecord(date = date, status = statuses[i]))
                         }
                     }
-
-                    // Calculate attendance percentage
-                    val percentage = if (overallClasses > 0) {
-                        (overallPresent.toFloat() / overallClasses) * 100
-                    } else {
-                        0f
-                    }
-
+                    val percentage = if (overallClasses > 0) (overallPresent.toFloat() / overallClasses) * 100 else 0f
                     subjects.add(
                         SubjectData(
-                            code = code,
-                            name = name,
-                            attendancePercentage = percentage,
-                            overallClasses = overallClasses,
-                            overallPresent = overallPresent,
-                            overallAbsent = overallAbsent,
-                            records = records
+                            code = code, name = name, attendancePercentage = percentage,
+                            overallClasses = overallClasses, overallPresent = overallPresent,
+                            overallAbsent = overallAbsent, records = records
                         )
                     )
                 }
-
-                Log.d(TAG, "Successfully parsed ${subjects.size} subjects")
+                Log.d(TAG, "Parsed ${subjects.size} subjects from legacy array.")
                 _subjectData.value = subjects
-            } else {
-                // Neither an object nor an array
-                Log.e(TAG, "Unrecognized JSON format: neither an object nor an array")
-                _errorMessage.value = "Unrecognized data format from server"
-            }
+                _isAttendanceDataLoaded.value = true // Mark as loaded
 
-        } catch (e: Exception) {
-            Log.e(TAG, "Error processing attendance data: ${e.message}")
-            // Log a snippet of the JSON to help with debugging
-            try {
-                val jsonSnippet = if (jsonData.length > 200) jsonData.substring(0, 200) + "..." else jsonData
-                Log.e(TAG, "JSON snippet: $jsonSnippet")
-            } catch (snippetError: Exception) {
-                Log.e(TAG, "Could not log JSON snippet: ${snippetError.message}")
+            } else {
+                throw IOException("Unrecognized JSON format (neither object nor array)")
             }
-            _errorMessage.value = "Error processing attendance data: ${e.message}"
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing attendance JSON: ${e.message}", e)
+            _errorMessage.value = "Failed to process attendance data."
             _subjectData.value = emptyList()
+            _isAttendanceDataLoaded.value = false
         }
     }
 
+    private fun parseProfileDataJson(jsonData: String) {
+        try {
+            val gson = Gson()
+            // Check for error format first
+            try {
+                val errorObj = gson.fromJson(jsonData, JsonObject::class.java)
+                if (errorObj.has("error")) {
+                    val errorMessage = errorObj.get("error").asString
+                    Log.e(TAG, "Profile error from server: $errorMessage")
+                    _profileError.value = errorMessage
+                    _profileData.value = null
+                    return // Exit parsing
+                }
+            } catch (e: Exception) { /* Not an error object, continue */ }
+
+            // Parse actual data
+            val profile = gson.fromJson(jsonData, ProfileData::class.java)
+            _profileData.value = profile
+            _profileError.value = null // Clear error on success
+            Log.d(TAG, "Successfully parsed profile data for: ${profile.studentName}")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing profile JSON: ${e.message}", e)
+            _profileError.value = "Failed to parse profile data."
+            _profileData.value = null
+        }
+    }
+
+    private fun parseTimetableDataJson(jsonData: String) {
+        try {
+            val gson = Gson()
+            // Check for error format first
+            try {
+                val errorObj = gson.fromJson(jsonData, JsonObject::class.java)
+                if (errorObj.has("error")) {
+                    val errorMessage = errorObj.get("error").asString
+                    Log.e(TAG, "Timetable error from server: $errorMessage")
+                    _timetableError.value = errorMessage
+                    _timetableData.value = null
+                    return // Exit parsing
+                }
+            } catch (e: Exception) { /* Not an error object, continue */ }
+
+            // Parse actual data
+            val baseData = gson.fromJson(jsonData, TimetableData::class.java)
+            val freshData = TimetableData(
+                schedule = baseData.schedule,
+                fetchTimestamp = System.currentTimeMillis() // Add timestamp
+            )
+            _timetableData.value = freshData
+            _timetableError.value = null // Clear error on success
+            Log.d(TAG, "Successfully parsed timetable data.")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing timetable JSON: ${e.message}", e)
+            _timetableError.value = "Failed to parse timetable data."
+            _timetableData.value = null
+        }
+    }
+
+
+    // --- Logout and Cleanup ---
+
     fun logout() {
         viewModelScope.launch {
-            Log.d(TAG, "Logging out user")
+            Log.d(TAG, "Logging out user...")
+            _isLoading.value = true // Show loading during logout
 
-            // Clear stored credentials
-            _storedUsername.value = null
-            _storedPassword.value = null
+            cancelRequests() // Cancel any active jobs
+            delay(100)
 
-            // Clear from SharedPreferences
+            clearAllData() // Clear local data state
+            _isLoggedIn.value = false
+            _isSessionInitialized.value = false
+            _sessionId.value = null
+
+            // Clear SharedPreferences
             sharedPreferences?.edit {
                 remove("username")
                 remove("password")
                 apply()
+                Log.d(TAG, "Cleared credentials from SharedPreferences.")
             }
 
-            // Clear session and auth state
-            _sessionId.value = null
-            _isLoggedIn.value = false
-            _isSessionInitialized.value = false
-
-            // Clear data
-            _subjectData.value = emptyList()
-            _profileData.value = null
-            _timetableData.value = null
-            _isAttendanceDataLoaded.value = false
-
-            // Cancel any pending requests
-            cancelRequests()
-
-            // Signal that logout is complete
-            _logoutCompleted.value = true
-
-            // Reset after a short delay
+            _logoutCompleted.value = true // Signal completion if needed
             delay(100)
             _logoutCompleted.value = false
 
-            // Re-initialize session (optional, depending on your flow)
-            initializeSession()
+            _isLoading.value = false // Hide loading
+            Log.d(TAG, "Logout process complete.")
         }
     }
 
-    // Fetch profile data
-    fun fetchProfileData() {
-        if (activeProfileJob != null) {
-            activeProfileJob?.cancel()
-        }
-
-        activeProfileJob = viewModelScope.launch {
-            _isProfileLoading.value = true
-            _profileError.value = null
-
-            try {
-                val currentSessionId = _sessionId.value
-                if (currentSessionId == null) {
-                    Log.e(TAG, "Cannot fetch profile: Session ID not available")
-                    throw IOException("Session ID not available")
-                }
-
-                Log.d(TAG, "Fetching profile data with session ID: $currentSessionId")
-
-                val profileResponse = apiService.getProfileData(currentSessionId)
-
-                if (profileResponse.isSuccessful && profileResponse.body() != null) {
-                    val responseBody = profileResponse.body()?.string() ?: ""
-                    Log.d(TAG, "Received profile data response of length: ${responseBody.length}")
-
-                    // Parse SSE response
-                    val dataPrefix = "data: "
-                    if (responseBody.contains(dataPrefix)) {
-                        val jsonData = responseBody.substringAfter(dataPrefix).substringBefore("\n")
-                        Log.d(TAG, "Extracted profile JSON data of length: ${jsonData.length}")
-
-                        // Parse profile data
-                        try {
-                            val gson = Gson()
-
-                            // Check if it's an error response
-                            try {
-                                val errorObj = gson.fromJson(jsonData, JsonObject::class.java)
-                                if (errorObj.has("error")) {
-                                    val errorMessage = errorObj.get("error").asString
-                                    Log.e(TAG, "Profile error from server: $errorMessage")
-                                    _profileError.value = errorMessage
-                                    return@launch
-                                }
-                            } catch (e: Exception) {
-                                // Not an error object, continue with normal parsing
-                            }
-
-                            // Parse the profile data
-                            val profileData = gson.fromJson(jsonData, ProfileData::class.java)
-                            Log.d(TAG, "Successfully parsed profile data for: ${profileData.studentName}")
-                            _profileData.value = profileData
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error parsing profile JSON: ${e.message}")
-                            _profileError.value = "Failed to parse profile data: ${e.message}"
-                        }
-                    } else {
-                        throw IOException("Invalid SSE format in profile response")
-                    }
-                } else {
-                    Log.e(TAG, "Failed to get profile data: ${profileResponse.code()}")
-                    throw IOException("Failed to get profile data: ${profileResponse.code()}")
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Error fetching profile data: ${e.message}")
-                _profileError.value = "Error fetching profile data: ${e.message}"
-            } finally {
-                _isProfileLoading.value = false
-                activeProfileJob = null
-            }
-        }
+    // Helper to clear all fetched data
+    private fun clearAllData() {
+        _subjectData.value = emptyList()
+        _profileData.value = null
+        _timetableData.value = null
+        _isAttendanceDataLoaded.value = false
+        _errorMessage.value = ""
+        _profileError.value = null
+        _timetableError.value = null
     }
 
-    // Fetch timetable data
-    // Add this to AttendanceViewModel.kt to refresh timetable data more aggressively
-    // Add these to your AttendanceViewModel.kt to enhance timetable management
 
-    // Replace your existing fetchTimetableData method with this enhanced version
-    fun fetchTimetableData(forceRefresh: Boolean = false) {
-        if (activeTimetableJob != null) {
-            activeTimetableJob?.cancel()
-        }
-
-        // Skip if already loaded and not forcing refresh
-        if (!forceRefresh && _timetableData.value != null && !(_timetableData.value?.isStale() ?: true)) {
-            Log.d(TAG, "Using cached timetable data (not stale)")
-            return
-        }
-
-        activeTimetableJob = viewModelScope.launch {
-            _isTimetableLoading.value = true
-            _timetableError.value = null
-
-            Log.d(TAG, "Starting timetable data fetch (force: $forceRefresh)")
-
-            try {
-                val currentSessionId = _sessionId.value
-                if (currentSessionId == null) {
-                    Log.e(TAG, "Cannot fetch timetable: Session ID not available")
-                    throw IOException("Session ID not available")
-                }
-
-                Log.d(TAG, "Fetching timetable data with session ID: $currentSessionId")
-
-                val timetableResponse = apiService.getTimetableData(currentSessionId)
-
-                if (timetableResponse.isSuccessful && timetableResponse.body() != null) {
-                    val responseBody = timetableResponse.body()?.string() ?: ""
-                    Log.d(TAG, "Received timetable data response of length: ${responseBody.length}")
-
-                    // Parse SSE response
-                    val dataPrefix = "data: "
-                    if (responseBody.contains(dataPrefix)) {
-                        val jsonData = responseBody.substringAfter(dataPrefix).substringBefore("\n")
-                        Log.d(TAG, "Extracted timetable JSON data of length: ${jsonData.length}")
-
-                        // Parse timetable data
-                        try {
-                            val gson = Gson()
-
-                            // Check if it's an error response
-                            try {
-                                val errorObj = gson.fromJson(jsonData, JsonObject::class.java)
-                                if (errorObj.has("error")) {
-                                    val errorMessage = errorObj.get("error").asString
-                                    Log.e(TAG, "Timetable error from server: $errorMessage")
-                                    _timetableError.value = errorMessage
-                                    return@launch
-                                }
-                            } catch (e: Exception) {
-                                // Not an error object, continue with normal parsing
-                            }
-
-                            // Parse the timetable data, ensuring we set the current timestamp
-                            val baseData = gson.fromJson(jsonData, TimetableData::class.java)
-
-                            // Create a new instance with current timestamp
-                            val freshData = TimetableData(
-                                schedule = baseData.schedule,
-                                fetchTimestamp = System.currentTimeMillis()
-                            )
-
-                            // Log days available in schedule
-                            val days = freshData.schedule.keys.joinToString(", ")
-                            val currentDay = getCurrentDayAbbreviation()
-
-                            Log.d(TAG, "Successfully parsed timetable with days: $days")
-                            Log.d(TAG, "Current day is: $currentDay")
-
-                            if (currentDay in freshData.schedule.keys) {
-                                val classes = freshData.schedule[currentDay]?.size ?: 0
-                                Log.d(TAG, "Found $classes classes for today ($currentDay)")
-                            } else {
-                                Log.w(TAG, "No schedule data for today ($currentDay)")
-                            }
-
-                            _timetableData.value = freshData
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error parsing timetable JSON: ${e.message}")
-                            e.printStackTrace()
-                            _timetableError.value = "Failed to parse timetable data: ${e.message}"
-                        }
-                    } else {
-                        throw IOException("Invalid SSE format in timetable response")
-                    }
-                } else {
-                    Log.e(TAG, "Failed to get timetable data: ${timetableResponse.code()}")
-                    throw IOException("Failed to get timetable data: ${timetableResponse.code()}")
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Error fetching timetable data: ${e.message}")
-                e.printStackTrace()
-                _timetableError.value = "Error fetching timetable data: ${e.message}"
-            } finally {
-                _isTimetableLoading.value = false
-                activeTimetableJob = null
-            }
-        }
-    }
-
-    // Helper method to get current day abbreviation
-    private fun getCurrentDayAbbreviation(): String {
-        val calendar = Calendar.getInstance()
-        val days = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
-        val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
-        return days[dayOfWeek - 1]
-    }
-
-    // Add this method to force refresh all data including timetable
-    fun forceRefreshAllData() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _errorMessage.value = ""
-
-            try {
-                // First, get a new session
-                initializeSession()
-
-                // Wait for session initialization
-                delay(500)
-
-                val currentSessionId = _sessionId.value
-                if (currentSessionId == null) {
-                    throw IOException("Failed to initialize session")
-                }
-
-                val username = _storedUsername.value
-                val password = _storedPassword.value
-
-                if (username != null && password != null) {
-                    val loginResponse = apiService.login(
-                        LoginRequest(
-                            session_id = currentSessionId,
-                            uid = username,
-                            pwd = password
-                        )
-                    )
-
-                    if (!loginResponse.isSuccessful) {
-                        throw IOException("Login failed with code: ${loginResponse.code()}")
-                    }
-
-                    var retryCount = 0
-                    while (retryCount < 3) {
-                        val sessionId = _sessionId.value ?: break
-                        val errorResponse = apiService.checkLoginErrors(sessionId)
-
-                        if (errorResponse.has("error")) {
-                            val errorMessage = errorResponse.get("error").asString
-                            throw IOException(errorMessage)
-                        }
-
-                        if (errorResponse.has("status") && errorResponse.get("status").asString == "no_errors") {
-                            break
-                        }
-
-                        delay(300)
-                        retryCount++
-                    }
-
-                    // Reset values to trigger fresh fetches
-                    _timetableData.value = null
-                    _profileData.value = null
-                    _subjectData.value = emptyList()
-
-                    // Mark as logged in and fetch fresh data
-                    _isLoggedIn.value = true
-
-                    // Fetch attendance first (this is required by your original logic)
-                    fetchAttendanceData()
-
-                    // Then fetch timetable and profile with force refresh
-                    fetchTimetableData(forceRefresh = true)
-                    fetchProfileData()
-                } else {
-                    throw IOException("No stored credentials")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Force refresh error: ${e.message}")
-                _errorMessage.value = "Error refreshing data: ${e.message}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-    // Improved Pull-to-refresh functionality with credential resubmission
-    fun refreshData() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _errorMessage.value = ""
-
-            Log.d(TAG, "Starting refresh data flow")
-
-            // Define errorFound variable at the beginning
-            var errorFound = false
-
-            try {
-                // First, get a new session regardless of current state
-                initializeSession()
-
-                // Wait a short time for session initialization
-                delay(500)
-
-                val currentSessionId = _sessionId.value
-                if (currentSessionId == null) {
-                    Log.e(TAG, "Failed to initialize session for refresh")
-                    _errorMessage.value = "Failed to initialize connection. Please try again."
-                    _isLoading.value = false
-                    return@launch
-                }
-
-                // Check if we have stored credentials
-                val username = _storedUsername.value
-                val password = _storedPassword.value
-
-                if (username != null && password != null) {
-                    Log.d(TAG, "Using stored credentials to refresh data")
-                    // Submit credentials with new session
-                    val loginResponse = apiService.login(
-                        LoginRequest(
-                            session_id = currentSessionId,
-                            uid = username,
-                            pwd = password
-                        )
-                    )
-
-                    if (!loginResponse.isSuccessful) {
-                        throw IOException("Login failed with code: ${loginResponse.code()}")
-                    }
-
-                    Log.d(TAG, "Credentials resubmitted, checking for errors...")
-
-                    // Check for credential errors
-                    var retryCount = 0
-
-                    while (retryCount < 3) {
-                        val currentId = _sessionId.value ?: break
-                        val errorResponse = apiService.checkLoginErrors(currentId)
-
-                        if (errorResponse.has("error")) {
-                            // Handle invalid credentials
-                            val errorMessage = errorResponse.get("error").asString
-                            Log.e(TAG, "Login error during refresh: $errorMessage")
-
-                            if (errorResponse.has("new_session_id")) {
-                                val newSessionId = errorResponse.get("new_session_id").asString
-                                Log.d(TAG, "Received new session ID: $newSessionId")
-                                _sessionId.value = newSessionId
-                                _isSessionInitialized.value = true
-                            }
-
-                            _errorMessage.value = errorMessage
-                            errorFound = true
-                            break
-                        }
-
-                        // If no errors found, proceed to fetch attendance
-                        if (errorResponse.has("status") && errorResponse.get("status").asString == "no_errors") {
-                            Log.d(TAG, "No login errors found, proceeding to fetch attendance data")
-                            break
-                        }
-
-                        delay(300) // Brief delay before checking again
-                        retryCount++
-                    }
-                } else {
-                    // No stored credentials
-                    Log.d(TAG, "No stored credentials found, cannot refresh data")
-                    _errorMessage.value = "Please log in to refresh data"
-                    errorFound = true
-                }
-
-                // Fetch attendance and timetable data if login was successful
-                if (!errorFound) {
-                    Log.d(TAG, "Login successful, refreshing data with session ID: ${_sessionId.value}")
-                    _isLoggedIn.value = true
-
-                    // Sequential fetch to avoid cancellation issues
-                    try {
-                        // Fetch attendance data first
-                        val currentSessionId = _sessionId.value
-                        if (currentSessionId == null) {
-                            Log.e(TAG, "Cannot fetch attendance: Session ID not available")
-                            throw IOException("Session ID not available")
-                        }
-
-                        Log.d(TAG, "Fetching attendance data with session ID: $currentSessionId")
-
-                        // Get attendance data using SSE
-                        val attendanceResponse = apiService.getAttendanceData(currentSessionId)
-
-                        if (attendanceResponse.isSuccessful && attendanceResponse.body() != null) {
-                            // Process the response
-                            val responseBody = attendanceResponse.body()?.string() ?: ""
-                            Log.d(TAG, "Received attendance data response of length: ${responseBody.length}")
-
-                            // SSE responses are formatted as "data: {json}\n\n"
-                            val dataPrefix = "data: "
-                            if (responseBody.contains(dataPrefix)) {
-                                val jsonData = responseBody.substringAfter(dataPrefix).substringBefore("\n")
-                                Log.d(TAG, "Extracted JSON data of length: ${jsonData.length}")
-
-                                // Parse the attendance data
-                                parseAttendanceData(jsonData)
-
-                                _isAttendanceDataLoaded.value = true
-                                Log.d(TAG, "Attendance data loaded successfully")
-                            } else {
-                                throw IOException("Invalid SSE format in response")
-                            }
-                        } else {
-                            Log.e(TAG, "Failed to get attendance data: ${attendanceResponse.code()}")
-                            throw IOException("Failed to get attendance data: ${attendanceResponse.code()}")
-                        }
-
-                        // Then fetch timetable data
-                        fetchTimetableData(forceRefresh = true)
-
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error fetching data during refresh: ${e.message}")
-                        _errorMessage.value = "Error refreshing data: ${e.message}"
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error during refresh: ${e.message}")
-                _errorMessage.value = "Error refreshing data: ${e.message}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-    // Helper function to assign consistent colors to subjects using Material 3 theme
-    @Composable
-    fun colorForSubject(subjectCode: String): Color {
-        return generateConsistentColor(subjectCode, MaterialTheme.colorScheme)
-    }
-
-    // Get color for attendance percentage based on Material 3 theme
-    @Composable
-    fun getAttendanceStatusColor(percentage: Float): Color {
-        val colorScheme = MaterialTheme.colorScheme
-        return when {
-            percentage >= 75.0f -> colorScheme.tertiary // Good attendance
-            percentage >= 65.0f -> colorScheme.secondary // Warning attendance
-            else -> colorScheme.error // Critical attendance
-        }
-    }
-
-    // Cancel all pending requests
     fun cancelRequests() {
-        Log.d(TAG, "Cancelling all pending requests")
+        Log.d(TAG, "Cancelling active jobs...")
         activeLoginJob?.cancel()
         activeAttendanceJob?.cancel()
         activeProfileJob?.cancel()
         activeTimetableJob?.cancel()
+        activeLoginJob = null
+        activeAttendanceJob = null
+        activeProfileJob = null
+        activeTimetableJob = null
+        Log.d(TAG,"Jobs cancelled.")
     }
+
+    // --- Utility Functions ---
 
     fun hasStoredCredentials(): Boolean {
         return !_storedUsername.value.isNullOrEmpty() && !_storedPassword.value.isNullOrEmpty()
     }
 
-    /**
-     * Gets stored credentials as a pair of username and password
-     */
     fun getStoredCredentials(): Pair<String, String>? {
         val username = _storedUsername.value
         val password = _storedPassword.value
-
         return if (!username.isNullOrEmpty() && !password.isNullOrEmpty()) {
             Pair(username, password)
         } else {
@@ -988,14 +817,47 @@ class AttendanceViewModel : ViewModel() {
         }
     }
 
+    @Composable
+    fun colorForSubject(subjectCode: String): Color {
+        // Ensure generateConsistentColor exists and works with MaterialTheme.colorScheme
+        return generateConsistentColor(subjectCode, MaterialTheme.colorScheme)
+    }
+
+    @Composable
+    fun getAttendanceStatusColor(percentage: Float): Color {
+        val colorScheme = MaterialTheme.colorScheme
+        return when {
+            percentage >= 75.0f -> colorScheme.tertiary
+            percentage >= 65.0f -> colorScheme.secondary
+            else -> colorScheme.error
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
-        Log.d(TAG, "ViewModel being cleared")
+        Log.d(TAG, "ViewModel cleared.")
         cancelRequests()
+    }
+
+    private fun getCurrentDayAbbreviation(): String {
+        val calendar = Calendar.getInstance()
+        val days = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+        return days[calendar.get(Calendar.DAY_OF_WEEK) - 1]
     }
 }
 
-// Subject data model for UI
+
+// --- Data Classes (Ensure these match your project structure and API) ---
+
+// API Response Structure for Attendance (Example)
+
+
+// API Response for Session ID (Example)
+data class SessionResponse(
+    val session_id: String
+)
+
+// Internal UI Data Model for Subjects
 data class SubjectData(
     val code: String,
     val name: String,
@@ -1003,45 +865,30 @@ data class SubjectData(
     val overallClasses: Int,
     val overallPresent: Int,
     val overallAbsent: Int,
-    val records: List<AttendanceRecord>
+    val records: List<AttendanceRecord> // Assumes AttendanceRecord exists
 )
 
-// Profile data model with proper field mapping
+// Internal UI Data Model for Profile
 data class ProfileData(
-    @SerializedName("Student ID")
-    val studentID: String = "",
-
-    @SerializedName("Student Name")
-    val studentName: String = "",
-
-    @SerializedName("DOB")
-    val dob: String = "",
-
-    @SerializedName("Gender")
-    val gender: String = "",
-
-    @SerializedName("Category")
-    val category: String = "",
-
-    @SerializedName("Admission")
-    val admission: String = "",
-
-    @SerializedName("Branch Name")
-    val branchName: String = "",
-
-    @SerializedName("Degree")
-    val degree: String = "",
-
-    @SerializedName("FT/PT")
-    val ftpt: String = "",
-
-    @SerializedName("Specialization")
-    val specialization: String = "",
-
-    @SerializedName("Section")
-    val section: String = ""
+    @SerializedName("Student ID") val studentID: String = "",
+    @SerializedName("Student Name") val studentName: String = "",
+    @SerializedName("DOB") val dob: String = "",
+    @SerializedName("Gender") val gender: String = "",
+    @SerializedName("Category") val category: String = "", // Add other fields as needed
+    @SerializedName("Admission") val admission: String = "",
+    @SerializedName("Branch Name") val branchName: String = "",
+    @SerializedName("Degree") val degree: String = "",
+    @SerializedName("FT/PT") val ftpt: String = "",
+    @SerializedName("Specialization") val specialization: String = "",
+    @SerializedName("Section") val section: String = ""
 )
 
+// Internal UI Data Model for Timetable
 
+// Placeholder for AttendanceRecord if not imported
+// data class AttendanceRecord(val date: String, val status: String)
 
+// Placeholder for LoginRequest if not imported
+// data class LoginRequest(val session_id: String, val uid: String, val pwd: String)
 
+// Placeholder for RetrofitClient and ApiService setup

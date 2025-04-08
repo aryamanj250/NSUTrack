@@ -36,6 +36,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
@@ -62,7 +66,11 @@ private val scheduleColorPalette = listOf(
     Color(0xFFF06292)  // Pink 300
     // You can refine this further. Maybe swap one out for a Brown-ish tone if desired.
 )
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class,
+    ExperimentalMaterialApi::class, ExperimentalMaterialApi::class // OptIn for PullRefresh
+)
 @Composable
 fun HomeScreen(
     navController: NavController,
@@ -71,68 +79,68 @@ fun HomeScreen(
     // --- State Declarations ---
     var isContentVisible by remember { mutableStateOf(false) }
     var showingAccountSheet by remember { mutableStateOf(false) }
-    val hapticFeedback = HapticFeedback.getHapticFeedback()
+    val hapticFeedback = HapticFeedback.getHapticFeedback() // Ensure HapticFeedback object exists
     val coroutineScope = rememberCoroutineScope()
 
     // --- ViewModel State Collection ---
-    val isLoading by viewModel.isLoading.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState() // Used for pull-refresh state
     val subjectData by viewModel.subjectData.collectAsState()
     val sessionId by viewModel.sessionId.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val profileData by viewModel.profileData.collectAsState()
+    // Specific loading states can be kept if needed for finer-grained UI updates
     val isProfileLoading by viewModel.isProfileLoading.collectAsState()
-    val timetableData by viewModel.timetableData.collectAsState()
     val isTimetableLoading by viewModel.isTimetableLoading.collectAsState()
+    val timetableData by viewModel.timetableData.collectAsState()
+
+    // --- Pull-to-Refresh State ---
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isLoading, // Link to the main loading state
+        onRefresh = {
+            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+            Log.d("HomeScreen", "Pull-to-refresh initiated by user.")
+            viewModel.performPullToRefresh() // Call the new ViewModel function
+        }
+    )
 
     // --- Animation States ---
     val contentAlpha by animateFloatAsState(
         targetValue = if (isContentVisible) 1f else 0f,
-        animationSpec = tween(durationMillis = 500, delayMillis = 50),
+        animationSpec = tween(durationMillis = 400, delayMillis = 50),
         label = "ContentAlpha"
     )
     val contentOffsetY by animateFloatAsState(
-        targetValue = if (isContentVisible) 0f else 30f,
-        animationSpec = tween(durationMillis = 500, delayMillis = 50),
+        targetValue = if (isContentVisible) 0f else 20f, // Reduced offset
+        animationSpec = tween(durationMillis = 400, delayMillis = 50, easing = EaseOutCubic),
         label = "ContentOffsetY"
     )
 
-
     // --- LaunchedEffects ---
     LaunchedEffect(key1 = Unit) {
-        delay(100)
+        delay(100) // Slight delay before fade-in
         isContentVisible = true
+    }
 
-        if (sessionId == null) {
-            viewModel.initializeSession()
-            delay(1000)
-            if (viewModel.sessionId.value == null) {
-                Log.d("HomeScreen", "Session null post-init, navigating login.")
+    // Effect to navigate to login if session is null and no credentials stored
+    LaunchedEffect(key1 = sessionId, key2 = viewModel.hasStoredCredentials()) {
+        if (sessionId == null && !viewModel.hasStoredCredentials() && !isLoading) {
+            Log.d("HomeScreen", "No session or credentials, navigating to login.")
+            // Prevent navigation if a login or refresh is already in progress
+            if (!viewModel.isLoginInProgress.value) {
                 navController.navigate("login") { popUpTo("home") { inclusive = true } }
             }
         }
-    }
-
-    LaunchedEffect(key1 = sessionId, key2 = subjectData.isEmpty()) {
-        if (sessionId != null && subjectData.isEmpty() && !isLoading) {
-            viewModel.refreshData()
+        // Trigger initial load if session is present but data is missing
+        else if (sessionId != null && subjectData.isEmpty() && !isLoading && viewModel.hasStoredCredentials()) {
+            Log.d("HomeScreen", "Session valid, has credentials, triggering initial load via refresh.")
+            viewModel.performPullToRefresh()
         }
     }
-    LaunchedEffect(key1 = sessionId, key2 = profileData) {
-        if (profileData == null && !isProfileLoading && sessionId != null) {
-            viewModel.fetchProfileData()
-        }
-    }
-    LaunchedEffect(key1 = sessionId, key2 = timetableData) {
-        if (timetableData == null && !isTimetableLoading && sessionId != null) {
-            viewModel.fetchTimetableData(false)
-        }
-    }
-    // --- End Effects ---
 
     // --- UI Structure ---
     Scaffold(
         topBar = {
-            EnhancedTopAppBar(
+            EnhancedTopAppBar( // Use your EnhancedTopAppBar
                 title = stringResource(R.string.home),
                 profileData = profileData,
                 onProfileClick = {
@@ -143,186 +151,206 @@ fun HomeScreen(
             )
         }
     ) { scaffoldPadding ->
-        LazyColumn(
+
+        // Box container for PullRefresh
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(
-                    // CRITICAL: Only apply top padding from scaffold, no bottom padding
-                    top = scaffoldPadding.calculateTopPadding(),
-                    bottom = 0.dp, // Important: no bottom padding
-                    start = 0.dp,
-                    end = 0.dp
-                )
-                .background(MaterialTheme.colorScheme.background)
-                .graphicsLayer {
-                    alpha = contentAlpha
-                    translationY = contentOffsetY
-                },
-            state = rememberLazyListState(),
-            contentPadding = PaddingValues(
-                start = 0.dp,
-                end = 0.dp,
-                top = 8.dp,
-                bottom = 0.dp // CRITICAL: No bottom padding here to eliminate dead space
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp) // Reduced from 16.dp to use space more efficiently
+                .padding(top = scaffoldPadding.calculateTopPadding()) // Apply top padding ONLY
+                .pullRefresh(pullRefreshState) // Apply pullRefresh modifier HERE
         ) {
-            // --- Schedule Section ---
-            item {
-                HomeScheduleSection(viewModel = viewModel, hapticFeedback = hapticFeedback)
-            }
-
-            // --- Error Message Display ---
-            if (errorMessage.isNotEmpty()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // No top padding here; handled by Box and Scaffold
+                    .padding(bottom = scaffoldPadding.calculateBottomPadding()) // Apply bottom nav padding if bar is shown
+                    .background(MaterialTheme.colorScheme.background)
+                    .graphicsLayer { // Apply entry animation
+                        alpha = contentAlpha
+                        translationY = contentOffsetY
+                    },
+                state = rememberLazyListState(),
+                contentPadding = PaddingValues(
+                    start = 0.dp,
+                    end = 0.dp,
+                    top = 8.dp, // Padding below the TopAppBar/PullIndicator area
+                    bottom = 16.dp // Extra padding at the very bottom
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp) // Space between items
+            ) {
+                // --- Schedule Section ---
                 item {
-                    ElevatedCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .animateItemPlacement()
-                            .padding(horizontal = 16.dp),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        ),
-                        shape = RoundedCornerShape(16.dp),
-                        onClick = {}
-                    ) {
-                        Text(
-                            text = errorMessage,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(16.dp),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
+                    // Ensure HomeScheduleSection composable exists and is used here
+                    HomeScheduleSection(viewModel = viewModel, hapticFeedback = hapticFeedback)
                 }
-            }
 
-            // --- Attendance Header ---
-            item {
-                Text(
-                    text = stringResource(R.string.attendance),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier
-                        .padding(top = 0.dp, bottom = 8.dp)
-                        .padding(horizontal = 16.dp)
-                )
-            }
-
-            // --- Attendance List Content (States) ---
-            when {
-                // Loading State
-                isLoading && subjectData.isEmpty() -> {
+                // --- Error Message Display ---
+                if (errorMessage.isNotEmpty()) {
                     item {
-                        Box(
+                        // Keep your error card implementation, make sure it animates placement
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(200.dp)
+                                .animateItemPlacement() // Animate placement
                                 .padding(horizontal = 16.dp),
-                            contentAlignment = Alignment.Center
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            ),
+                            shape = RoundedCornerShape(16.dp)
                         ) {
-                            CircularProgressIndicator(
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(40.dp),
-                                strokeWidth = 4.dp
+                            Text(
+                                text = errorMessage,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     }
                 }
-                // Empty State
-                subjectData.isEmpty() && !isLoading && errorMessage.isEmpty() -> {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp)
-                                .padding(horizontal = 16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+                // --- Attendance Header ---
+                item {
+                    Text(
+                        text = stringResource(R.string.attendance),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier
+                            .padding(top = 8.dp, bottom = 8.dp) // Adjusted padding
+                            .padding(horizontal = 16.dp)
+                            .animateItemPlacement() // Animate placement
+                    )
+                }
+
+                // --- Attendance List Content (States) ---
+                when {
+                    // Loading State (Subtle placeholder while pull-refresh is active)
+                    isLoading && subjectData.isEmpty() -> {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(150.dp) // Smaller placeholder height
+                                    .padding(horizontal = 16.dp)
+                                    .animateItemPlacement(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                // Optional: Show a very subtle text or nothing,
+                                // relying on the PullRefreshIndicator
                                 Text(
-                                    text = stringResource(R.string.no_attendance_data),
+                                    stringResource(R.string.loading_attendance), // "Loading attendance..."
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodyLarge
+                                    style = MaterialTheme.typography.bodyMedium
                                 )
-                                Spacer(Modifier.height(16.dp))
-                                Button(
-                                    onClick = {
-                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
-                                        coroutineScope.launch { viewModel.refreshData() }
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary
-                                    ),
-                                    shape = RoundedCornerShape(24.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Refresh,
-                                        contentDescription = stringResource(R.string.refresh),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.width(8.dp))
+                            }
+                        }
+                    }
+                    // Empty State (When not loading and no data/error)
+                    subjectData.isEmpty() && !isLoading && errorMessage.isEmpty() -> {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp)
+                                    .padding(horizontal = 16.dp)
+                                    .animateItemPlacement(), // Animate empty state
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(
-                                        text = stringResource(R.string.refresh),
-                                        style = MaterialTheme.typography.labelLarge
+                                        text = stringResource(R.string.no_attendance_data),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        textAlign = TextAlign.Center
                                     )
+                                    Spacer(Modifier.height(16.dp))
+                                    Button( // Explicit refresh button
+                                        onClick = {
+                                            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                            viewModel.performPullToRefresh() // Trigger refresh
+                                        },
+                                        shape = RoundedCornerShape(24.dp) // Modern shape
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Refresh,
+                                            contentDescription = stringResource(R.string.refresh),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(stringResource(R.string.refresh))
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                // Data Available State
-                subjectData.isNotEmpty() -> {
-                    item(key = "attendance-list-card") { // Use a stable key for the single card item
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .animateItemPlacement(tween(300))
-                                .padding(horizontal = 16.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.3f)
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat design
-                        ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                subjectData.forEachIndexed { index, subject ->
-                                    SubjectRowContent( // Call the new composable for each subject's content
-                                        subject = subject,
-                                        viewModel = viewModel, // Pass viewModel if needed by DetailedAttendanceView
-                                        hapticFeedback = hapticFeedback,
-                                        modifier = Modifier.fillMaxWidth() // Ensure row content fills width inside Column
-                                    )
-                                    // Add a divider between items, but not after the last one
-                                    if (index < subjectData.size - 1) {
-                                        Divider(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 16.dp), // Indent divider to align with content padding inside card
-                                            thickness = 0.5.dp,
-                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f) // Subtle color
+                    // Data Available State
+                    subjectData.isNotEmpty() -> {
+                        // Wrap subjects in a single Card item
+                        item(key = "attendance-list-card") { // Use a stable key
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .animateItemPlacement(tween(300)) // Animate card placement
+                                    .padding(horizontal = 16.dp),
+                                shape = RoundedCornerShape(16.dp), // Consistent rounding
+                                colors = CardDefaults.cardColors(
+                                    // Use a slightly transparent surface container for depth
+                                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+                                ),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp) // Subtle elevation
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    subjectData.forEachIndexed { index, subject ->
+                                        // Ensure SubjectRowContent composable exists and is used here
+                                        SubjectRowContent(
+                                            subject = subject,
+                                            viewModel = viewModel, // Pass if needed by detail view
+                                            hapticFeedback = hapticFeedback,
+                                            modifier = Modifier.fillMaxWidth()
                                         )
+                                        // Add divider, except after the last item
+                                        if (index < subjectData.size - 1) {
+                                            HorizontalDivider( // Use M3 Divider
+                                                modifier = Modifier.padding(horizontal = 16.dp), // Indent divider
+                                                thickness = 0.5.dp, // Thin divider
+                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-                else -> { /* Handled by other states */ }
-            }
-            // --- End Attendance List Content ---
-        } // End LazyColumn
+                // --- End Attendance List Content ---
+
+            } // End LazyColumn
+
+            // PullRefreshIndicator - Positioned at the top center within the Box
+            PullRefreshIndicator(
+                refreshing = isLoading,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                backgroundColor = MaterialTheme.colorScheme.surface, // Match background
+                contentColor = MaterialTheme.colorScheme.primary // Indicator color
+            )
+
+        } // End Box for PullRefresh
     } // End Scaffold
 
-    // --- Account Bottom Sheet Display (Unchanged) ---
+    // --- Account Bottom Sheet Display (Keep existing logic) ---
     if (showingAccountSheet) {
+        // Ensure AccountView composable exists and is used here
         AccountView(
             viewModel = viewModel,
             onDismiss = { showingAccountSheet = false },
             onLogout = {
-                // Navigate to login screen
-                navController.navigate("login") {
-                    popUpTo("home") { inclusive = true }
+                showingAccountSheet = false // Dismiss sheet first
+                coroutineScope.launch {
+                    delay(250) // Allow sheet dismiss animation
+                    navController.navigate("login") {
+                        popUpTo("home") { inclusive = true }
+                    }
                 }
             }
         )
