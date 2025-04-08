@@ -114,25 +114,22 @@ class WebViewActivity : AppCompatActivity() {
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
 
-            // Check if there's an app that can handle this file
-            if (intent.resolveActivity(packageManager) != null) {
+            // Don't use resolveActivity() to avoid package visibility issues
+            try {
                 startActivity(intent)
-                finish() // Close WebView activity since we're viewing in another app
-            } else {
-                // No app can handle this file type, show share dialog instead
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = mimeType
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-
-                startActivity(Intent.createChooser(shareIntent, "Share file using"))
-
                 // Hide progress bar
                 progressBar.visibility = View.GONE
+                // Optional: close this activity after launching the file
+                finish()
+            } catch (e: android.content.ActivityNotFoundException) {
+                // No app can handle this file type
+                Toast.makeText(this, "No app found to open this type of file", Toast.LENGTH_SHORT).show()
+                progressBar.visibility = View.GONE
             }
+
         } catch (e: Exception) {
             Log.e(TAG, "Error opening file", e)
             Toast.makeText(this, "Error opening file: ${e.message}", Toast.LENGTH_LONG).show()
