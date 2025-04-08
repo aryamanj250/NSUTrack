@@ -18,6 +18,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.nsutrack.nsuttrial.AttendanceViewModel
+import androidx.compose.material3.surfaceColorAtElevation
+import androidx.compose.ui.unit.dp
 
 // Updated Material 3 color scheme for dark theme with softer colors
 private val SoftDarkColorScheme = darkColorScheme(
@@ -106,6 +108,9 @@ fun NSUTrackTheme(
         else -> SoftLightColorScheme
     }
 
+    // Calculate the surface color with the specific elevation used in BottomNavBar
+    val navigationBarColor = colorScheme.surfaceColorAtElevation(2.dp)
+
     // Apply status bar and navigation bar styling
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -113,14 +118,13 @@ fun NSUTrackTheme(
             val window = (view.context as Activity).window
 
             // Tell the system that our app will handle edge-to-edge
-            WindowCompat.setDecorFitsSystemWindows(window, false)
+            // WindowCompat.setDecorFitsSystemWindows(window, false) // REMOVED: To disable edge-to-edge
 
-            // Set status bar color to transparent or background color
-            window.statusBarColor = Color.Transparent.toArgb()
+            // Set status bar color to match the app's background color
+            window.statusBarColor = colorScheme.background.toArgb() // Use app background color
 
-            // Set navigation bar color to match your app's bottom navigation bar
-            // Using surface color to match bottom navigation bar
-            window.navigationBarColor = colorScheme.surface.toArgb()
+            // Set navigation bar color using the value resolved outside the SideEffect
+            window.navigationBarColor = navigationBarColor.toArgb() // Use resolved color
 
             // If you want a small tonal difference between system nav and app nav,
             // you can use surfaceVariant instead
@@ -131,7 +135,7 @@ fun NSUTrackTheme(
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
 
             // Remove the navigation bar divider on Android 10+
-            window.isNavigationBarContrastEnforced = false
+            // window.isNavigationBarContrastEnforced = false // Keep this commented/removed if not needed
         }
     }
 
