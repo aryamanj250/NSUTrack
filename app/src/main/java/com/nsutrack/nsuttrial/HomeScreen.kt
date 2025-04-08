@@ -19,7 +19,6 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import kotlin.random.Random
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,12 +36,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.unit.IntOffset
 import com.nsutrack.nsuttrial.ui.theme.getAttendanceAdvice
 import com.nsutrack.nsuttrial.ui.theme.getReadableTextColor
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +50,18 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 
+private val scheduleColorPalette = listOf(
+    Color(0xFF82C584),
+    Color(0xFF64B5F6),
+    Color(0xFFFFB74D),
+    Color(0xFFBA68C8),
+    Color(0xFFE57373),
+    Color(0xFF4DB6AC),
+    Color(0xFFFFF176),
+    Color(0xFF90A4AE),
+    Color(0xFFF06292)  // Pink 300
+    // You can refine this further. Maybe swap one out for a Brown-ish tone if desired.
+)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
@@ -87,6 +95,7 @@ fun HomeScreen(
         animationSpec = tween(durationMillis = 500, delayMillis = 50),
         label = "ContentOffsetY"
     )
+
 
     // --- LaunchedEffects ---
     LaunchedEffect(key1 = Unit) {
@@ -151,8 +160,8 @@ fun HomeScreen(
                 },
             state = rememberLazyListState(),
             contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
+                start = 0.dp,
+                end = 0.dp,
                 top = 8.dp,
                 bottom = 0.dp // CRITICAL: No bottom padding here to eliminate dead space
             ),
@@ -167,7 +176,10 @@ fun HomeScreen(
             if (errorMessage.isNotEmpty()) {
                 item {
                     ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().animateItemPlacement(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateItemPlacement()
+                            .padding(horizontal = 16.dp),
                         colors = CardDefaults.elevatedCardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         ),
@@ -191,7 +203,9 @@ fun HomeScreen(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    modifier = Modifier
+                        .padding(top = 0.dp, bottom = 8.dp)
+                        .padding(horizontal = 16.dp)
                 )
             }
 
@@ -201,7 +215,10 @@ fun HomeScreen(
                 isLoading && subjectData.isEmpty() -> {
                     item {
                         Box(
-                            modifier = Modifier.fillMaxWidth().height(200.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                                .padding(horizontal = 16.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             CircularProgressIndicator(
@@ -216,7 +233,10 @@ fun HomeScreen(
                 subjectData.isEmpty() && !isLoading && errorMessage.isEmpty() -> {
                     item {
                         Box(
-                            modifier = Modifier.fillMaxWidth().height(200.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                                .padding(horizontal = 16.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -253,20 +273,40 @@ fun HomeScreen(
                 }
                 // Data Available State
                 subjectData.isNotEmpty() -> {
-                    items(
-                        items = subjectData,
-                        key = { it.code }
-                    ) { subject ->
-                            AttendanceCard(
-                            subject = subject,
-                            viewModel = viewModel,
-                            hapticFeedback = hapticFeedback,
-                            modifier = Modifier.animateItemPlacement(tween(300))
-                        )
+                    item(key = "attendance-list-card") { // Use a stable key for the single card item
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateItemPlacement(tween(300))
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.3f)
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat design
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                subjectData.forEachIndexed { index, subject ->
+                                    SubjectRowContent( // Call the new composable for each subject's content
+                                        subject = subject,
+                                        viewModel = viewModel, // Pass viewModel if needed by DetailedAttendanceView
+                                        hapticFeedback = hapticFeedback,
+                                        modifier = Modifier.fillMaxWidth() // Ensure row content fills width inside Column
+                                    )
+                                    // Add a divider between items, but not after the last one
+                                    if (index < subjectData.size - 1) {
+                                        Divider(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp), // Indent divider to align with content padding inside card
+                                            thickness = 0.5.dp,
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f) // Subtle color
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
-
-                    // IMPORTANT: If this is the last item, don't add any spacer or padding at the end
-                    // No footer spacer item - explicitly removed to eliminate dead space
                 }
                 else -> { /* Handled by other states */ }
             }
@@ -346,7 +386,9 @@ fun HomeScheduleSection(
                                 ) ?: return@mapNotNull null
 
                                 val (startTime, endTime) = timePair
-                                val color = generateConsistentColor(classSchedule.subject) // Ensure generateConsistentColor is accessible
+                                // Note: We no longer use generateConsistentColor here.
+                                // Color will be assigned later from the palette.
+                                val placeholderColor = Color.Gray // Temporary
 
                                 // Extract group numbers (your logic here)
                                 val groupInfo = classSchedule.group?.trim()
@@ -359,12 +401,11 @@ fun HomeScheduleSection(
                                     }
                                 } ?: emptyList()
 
-
                                 Schedule(
                                     subject = classSchedule.subjectName ?: classSchedule.subject,
                                     startTime = startTime,
                                     endTime = endTime,
-                                    color = color,
+                                    color = placeholderColor, // Use placeholder
                                     room = classSchedule.room,
                                     group = groupInfo,
                                     groups = groupNumbers // Pass extracted groups
@@ -375,10 +416,26 @@ fun HomeScheduleSection(
                             }
                         }
                         // Merge schedules that should be combined (ensure mergeSchedules is accessible)
-                        val mergedSchedules = mergeSchedules(schedules).sortedBy { it.startTime }
+                        var mergedSchedules = mergeSchedules(schedules).sortedBy { it.startTime }
+
+                        // *** START: New Color Assignment Logic ***
+                        val finalMergedSchedules = mutableListOf<Schedule>()
+                        var colorIndex = 0
+                        for (schedule in mergedSchedules) {
+                            // Only assign palette colors to non-break schedules
+                            val assignedColor = scheduleColorPalette[colorIndex % scheduleColorPalette.size]
+                            finalMergedSchedules.add(schedule.copy(color = assignedColor)) // Update color
+                            colorIndex++ // Increment index for the next non-break class
+                        }
+                        mergedSchedules = finalMergedSchedules // Update the list with assigned colors
+                        // *** END: New Color Assignment Logic ***
+
                         // Add breaks between classes (ensure insertBreaksBetweenClasses is accessible)
+                        // This happens *after* colors are assigned to classes. Breaks get their default color.
                         processedSchedules = insertBreaksBetweenClasses(mergedSchedules)
+
                         Log.d("ScheduleSection", "Final schedule count with breaks: ${processedSchedules.size}")
+
                     } else {
                         Log.d("ScheduleSection", "No schedules found for $today")
                         // processedSchedules remains emptyList()
@@ -403,9 +460,10 @@ fun HomeScheduleSection(
         if (todaySchedule.isNotEmpty()) {
             delay(300) // Allow composition time
             val freshCurrentTime = timeState // Use the updated state time
-            val currentClass = todaySchedule.firstOrNull { it.isCurrentTime(freshCurrentTime) }
+            // Find target class logic remains the same
+            val currentClass = todaySchedule.firstOrNull { !it.isBreak && it.isCurrentTime(freshCurrentTime) } // Prioritize non-breaks for scroll
             val nearestUpcoming = if (currentClass == null) {
-                todaySchedule.filter { it.startTime.after(freshCurrentTime) }
+                todaySchedule.filter { !it.isBreak && it.startTime.after(freshCurrentTime) } // Focus scroll on actual classes
                     .minByOrNull { it.startTime.time - freshCurrentTime.time }
             } else null
 
@@ -413,26 +471,28 @@ fun HomeScheduleSection(
             if (targetClass != null) {
                 val index = todaySchedule.indexOf(targetClass)
                 if (index >= 0) {
-                    Log.d("AutoScroll", "Scrolling to index $index")
-                    try { listState.animateScrollToItem(index) } catch (e: Exception) { /* log error */ }
+                    Log.d("AutoScroll", "Scrolling to index $index for target: ${targetClass.subject}")
+                    try { listState.animateScrollToItem(index) } catch (e: Exception) { Log.e("AutoScroll", "Scroll error", e) }
+                } else {
+                    Log.d("AutoScroll", "Target class ${targetClass.subject} not found in final list")
                 }
+            } else {
+                Log.d("AutoScroll", "No current or upcoming class found to scroll to.")
             }
         }
     }
 
-    // --- UI ---
+    // --- UI (Remains the same structure as your provided code) ---
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp) // Consistent bottom padding
     ) {
         // Section header with icon and loading indicator
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .padding(vertical = 12.dp) // Keep padding consistent
-            // Add horizontal padding if needed, e.g., .padding(horizontal = 16.dp, vertical = 12.dp)
-            // If horizontal padding is applied globally in LazyColumn, you might not need it here.
+                .padding(vertical = 12.dp)
+                .padding(horizontal = 16.dp)
         ) {
             Text(
                 text = stringResource(R.string.schedule), // Use updated string if needed
@@ -460,7 +520,10 @@ fun HomeScheduleSection(
                 // Show Error Card first if an error exists
                 error != null -> {
                     Card(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .padding(horizontal = 16.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         ),
@@ -480,6 +543,7 @@ fun HomeScheduleSection(
                     Box(modifier = Modifier
                         .fillMaxWidth()
                         .height(95.dp) // Match the 'No classes' card height
+                        .padding(horizontal = 16.dp)
                         .clip(RoundedCornerShape(15.dp)) // Clip shape for consistency
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                     ) {
@@ -493,6 +557,7 @@ fun HomeScheduleSection(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(95.dp)
+                            .padding(horizontal = 16.dp)
                             .animateContentSize(), // Animate size changes smoothly
                         shape = RoundedCornerShape(15.dp),
                         colors = CardDefaults.cardColors(
@@ -538,7 +603,7 @@ fun HomeScheduleSection(
                         LazyRow(
                             state = listState,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(vertical = 4.dp), // Padding around cards
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             items(
@@ -549,7 +614,7 @@ fun HomeScheduleSection(
 
                                 // Apply scaling animation to current class (ensure animation states are defined)
                                 val scale by animateFloatAsState(
-                                    targetValue = if (isCurrentClass) 1.05f else 1f,
+                                    targetValue = if (isCurrentClass && !schedule.isBreak) 1.05f else 1f, // Only scale non-breaks
                                     animationSpec = spring(
                                         dampingRatio = Spring.DampingRatioMediumBouncy,
                                         stiffness = Spring.StiffnessLow
@@ -558,6 +623,7 @@ fun HomeScheduleSection(
                                 )
 
                                 // Call your existing card composable (ensure it's accessible)
+                                // Pass the schedule with the *assigned* palette color
                                 HomeScheduleCard(
                                     schedule = schedule,
                                     width = calculateWidth(schedule), // Ensure calculateWidth is accessible
@@ -568,6 +634,7 @@ fun HomeScheduleSection(
                         }
 
                         // Red line indicator (ensure RedLineIndicator & calculateRedLinePosition are accessible)
+                        // Calculate position based on updated time state
                         val redLinePosition = calculateRedLinePosition(timeState)
                         if (redLinePosition > 0) {
                             RedLineIndicator(position = redLinePosition)
@@ -586,7 +653,6 @@ fun HomeScheduleSection(
         }
     }
 }
-
 private fun parseClassTimes(startTimeStr: String, endTimeStr: String, baseDate: Date): Pair<Date, Date>? {
     try {
         if (!startTimeStr.contains(":") || !endTimeStr.contains(":")) {
@@ -645,19 +711,20 @@ fun HomeScheduleCard(
     isCurrentClass: Boolean,
     animationScale: Float
 ) {
+    // Determine text color based on the background (palette color or break color)
     val textColor = if (schedule.isBreak)
         MaterialTheme.colorScheme.onSurfaceVariant
     else
-        getReadableTextColor(schedule.color)
+        getReadableTextColor(schedule.color) // Use the assigned palette color
 
     // For dashed border - get the outline color from the theme within the composable
     val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
 
-    // Add subtle pulsing animation for current class
+    // Add subtle pulsing animation for current class (non-breaks only)
     val pulseAnimation = rememberInfiniteTransition(label = "PulseAnimation")
     val pulseAlpha by pulseAnimation.animateFloat(
-        initialValue = if (isCurrentClass) 0.92f else 1f,
-        targetValue = if (isCurrentClass) 1f else 1f,
+        initialValue = if (isCurrentClass && !schedule.isBreak) 0.95f else 1f, // Pulse only for current non-break
+        targetValue = if (isCurrentClass && !schedule.isBreak) 1f else 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(2000, easing = EaseInOutSine),
             repeatMode = RepeatMode.Reverse
@@ -669,14 +736,13 @@ fun HomeScheduleCard(
     val elevation = if (isCurrentClass && !schedule.isBreak) 6.dp else 2.dp
 
     if (schedule.isBreak) {
-        // Break card with dashed borders
+        // --- Break card styling (remains unchanged) ---
         Box(
             modifier = Modifier
-                .width((width * animationScale).dp)
+                .width((width * animationScale).dp) // Apply scale even to breaks for consistency? Or keep 1f? Let's scale.
                 .height((75 * animationScale).dp)
                 .clip(RoundedCornerShape(12.dp))
         ) {
-            // Use a simple dashed border with fixed values instead of theme colors
             DashedBorder(
                 color = outlineColor,
                 shape = RoundedCornerShape(12.dp),
@@ -686,31 +752,25 @@ fun HomeScheduleCard(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Content
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 12.dp, vertical = 7.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // Break label
                 Text(
-                    text = schedule.subject,
+                    text = schedule.subject, // "Break"
                     style = MaterialTheme.typography.bodyLarge,
                     color = textColor,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1
                 )
-
-                // Time range
                 Text(
                     text = schedule.timeRange,
                     style = MaterialTheme.typography.bodyMedium,
                     color = textColor.copy(alpha = 0.8f),
                     maxLines = 1
                 )
-
-                // Duration
                 val durationMinutes = schedule.duration / 60
                 if (durationMinutes > 0) {
                     Text(
@@ -722,52 +782,39 @@ fun HomeScheduleCard(
             }
         }
     } else {
-        // Introduce a slight random variation for card colors to make them more visually interesting
-        // Use the card's ID as a seed for consistent variation
-        val seed = schedule.id.hashCode()
-        val random = Random(seed)
+        // --- Regular class card using assigned palette color ---
+        val cardColor = schedule.color // Use the color assigned from the palette
+        val adjustedColor = cardColor.copy(alpha = 0.85f) // Slightly increase alpha compared to before
 
-        // Generate a slight hue variation
-        val hueShift = random.nextFloat() * 0.06f - 0.03f  // Small shift between -0.03 and +0.03
-        val saturationFactor = 0.85f + random.nextFloat() * 0.15f  // 0.85 to 1.0
-
-        // Apply the variation and reduce the opacity
-        val baseColor = schedule.color
-        val adjustedColor = baseColor.copy(
-            alpha = 0.75f  // Make the card more translucent
-        )
-
-        // Regular class card with updated styling
         Box(
             modifier = Modifier
                 .width((width * animationScale).dp)
                 .height((75 * animationScale).dp)
                 .graphicsLayer {
-                    alpha = pulseAlpha
+                    alpha = pulseAlpha // Apply pulsing alpha
                 }
                 .shadow(
-                    elevation = elevation,
+                    elevation = elevation, // Animated elevation
                     shape = RoundedCornerShape(12.dp),
-                    spotColor = adjustedColor.copy(alpha = 0.5f)  // Lighter shadow
+                    spotColor = adjustedColor.copy(alpha = 0.4f) // Slightly softer shadow
                 )
         ) {
             Card(
-                modifier = Modifier
-                    .fillMaxSize(),
-                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(10.dp), // Slightly smaller radius than shadow
                 colors = CardDefaults.cardColors(
-                    containerColor = adjustedColor
+                    containerColor = adjustedColor // Use the adjusted palette color
                 ),
-                elevation = CardDefaults.cardElevation(defaultElevation = (-10).dp)  // Remove default elevation for flatter look
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat look inside the Box shadow
             ) {
-                // Add subtle gradient overlay for depth
+                // Subtle gradient overlay for depth (kept from original)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
                             Brush.linearGradient(
                                 colors = listOf(
-                                    Color.White.copy(alpha = 0.15f),  // Slightly more pronounced highlight
+                                    Color.White.copy(alpha = 0.15f),
                                     Color.Transparent
                                 ),
                                 start = Offset(0f, 0f),
@@ -785,7 +832,7 @@ fun HomeScheduleCard(
                         Text(
                             text = schedule.subject,
                             style = MaterialTheme.typography.titleMedium,
-                            color = textColor,  // Full opacity for better readability
+                            color = textColor, // Ensure readable text color
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1
                         )
@@ -798,24 +845,16 @@ fun HomeScheduleCard(
                             maxLines = 1
                         )
 
-                        // Room and group info
+                        // Room and group info (kept from original)
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Room info
                             if (schedule.room != null) {
                                 val roomText = if (schedule.room.contains(", ")) {
                                     val rooms = schedule.room.split(", ")
-                                    if (rooms.size > 2) {
-                                        "${rooms[0]}, ${rooms[1]}..."
-                                    } else {
-                                        schedule.room
-                                    }
-                                } else {
-                                    schedule.room
-                                }
-
+                                    if (rooms.size > 2) "${rooms[0]}, ${rooms[1]}..." else schedule.room
+                                } else schedule.room
                                 Text(
                                     text = roomText,
                                     style = MaterialTheme.typography.bodySmall,
@@ -823,17 +862,9 @@ fun HomeScheduleCard(
                                     maxLines = 1
                                 )
                             }
-
-                            // Separator
                             if (schedule.room != null && schedule.getFormattedGroups() != null) {
-                                Text(
-                                    text = "•",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = textColor.copy(alpha = 0.7f)
-                                )
+                                Text("•", style = MaterialTheme.typography.bodySmall, color = textColor.copy(alpha = 0.7f))
                             }
-
-                            // Group info using the method
                             schedule.getFormattedGroups()?.let { groups ->
                                 Text(
                                     text = groups,
@@ -847,7 +878,7 @@ fun HomeScheduleCard(
                 }
             }
 
-            // Add a small indicator for current class with animation
+            // Current class indicator animation (kept from original)
             if (isCurrentClass) {
                 val indicatorScale by pulseAnimation.animateFloat(
                     initialValue = 1f,
@@ -858,7 +889,6 @@ fun HomeScheduleCard(
                     ),
                     label = "Indicator Scale"
                 )
-
                 Box(
                     modifier = Modifier
                         .size(8.dp)
@@ -907,24 +937,24 @@ fun DashedBorder(
 }
 @OptIn(ExperimentalMaterial3Api::class) // Necessary for Card defaults
 @Composable
-fun AttendanceCard(
+fun SubjectRowContent(
     subject: SubjectData,
     viewModel: AttendanceViewModel, // Keep viewModel if needed for DetailedAttendanceView or future actions
     hapticFeedback: HapticFeedback.HapticHandler,
-    modifier: Modifier = Modifier // Pass modifier for external controls like animateItemPlacement
+    modifier: Modifier = Modifier
 ) {
     var showDetailedView by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     var isPressed by remember { mutableStateOf(false) }
 
-    // Scale animation for interactive feedback on the card
-    val cardScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
+    // Scale animation for interactive feedback on the row
+    val rowScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f, // Slightly less pronounced scale than card
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioLowBouncy,
             stiffness = Spring.StiffnessMediumLow
         ),
-        label = "Card Scale"
+        label = "SubjectRow Scale"
     )
 
     // Calculate advice text based on attendance data
@@ -944,114 +974,74 @@ fun AttendanceCard(
         }
     }
 
-    // --- Item Layout Structure ---
-    // Root Column for the entire list item (Card + Spacer + Divider)
-    Column(
-        // Apply external modifier first (e.g., from LazyColumn's items scope)
-        modifier = modifier
-            .fillMaxWidth()
-        // No vertical padding here - spacing is controlled by LazyColumn's verticalArrangement
-    ) {
-        // Translucent Card holding the main interactive content
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .scale(cardScale) // Apply press animation scale
-                .clip(RoundedCornerShape(16.dp)) // Consistent rounded corners
-                .clickable {
-                    isPressed = true
-                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                    coroutineScope.launch {
-                        delay(150) // Duration for press animation visibility
-                        isPressed = false
-                        showDetailedView = true // Trigger detail view after animation
-                    }
-                },
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                // Use a theme color with reduced alpha for translucency
-                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.3f)
-                // Adjust alpha or color (e.g., surfaceVariant) as needed for your theme
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat design
-        ) {
-            // Row containing the textual and icon content inside the Card
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // Padding inside the Card
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Left Column: Subject Name and Advice
-                Column(
-                    modifier = Modifier.weight(1f), // Occupy available space
-                    verticalArrangement = Arrangement.spacedBy(4.dp) // Space between texts
-                ) {
-                    Text(
-                        text = subject.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface, // Adjust color based on contrast if needed
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Text(
-                        text = adviceText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                // Right Row: Attendance Percentage and Arrow Icon
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End,
-                    modifier = Modifier.padding(start = 12.dp) // Space from left content
-                ) {
-                    Text(
-                        text = "${subject.attendancePercentage.toInt()}%",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = attendanceColor, // Dynamic color
-                        modifier = Modifier.align(Alignment.CenterVertically)
-                    )
-
-                    Spacer(Modifier.width(8.dp)) // Space before icon
-
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = stringResource(R.string.details), // Accessibility
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(20.dp) // Consistent icon size
-                    )
+    // Row containing the textual and icon content
+    Row(
+        modifier = modifier // Apply external modifier
+            .scale(rowScale) // Apply press animation scale
+            .clickable {
+                isPressed = true
+                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                coroutineScope.launch {
+                    delay(150) // Duration for press animation visibility
+                    isPressed = false
+                    showDetailedView = true // Trigger detail view after animation
                 }
             }
-        } // End Card
+            // Padding inside the Row, defining the content area
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Left Column: Subject Name and Advice
+        Column(
+            modifier = Modifier.weight(1f), // Occupy available space
+            verticalArrangement = Arrangement.spacedBy(4.dp) // Space between texts
+        ) {
+            Text(
+                text = subject.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface, // Use onSurface for content inside the card
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
-        // Spacer placed *after* the Card and *before* the Divider
-        // Pushes the Divider down to appear more centered in the LazyColumn's item gap.
-        // Adjust height (e.g., half of LazyColumn's verticalArrangement spacing)
-        Spacer(modifier = Modifier.height(4.dp)) // Example: use 4.dp if LazyColumn spacedBy is 8.dp
+            Text(
+                text = adviceText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, // Use onSurfaceVariant
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
 
-        // Divider visually separates this item from the next one below
-        Divider(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp), // Indent to align with content padding
-            thickness = 0.5.dp, // Thin and subtle
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f) // Subtle color
-        )
+        // Right Row: Attendance Percentage and Arrow Icon
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End,
+            modifier = Modifier.padding(start = 12.dp) // Space from left content
+        ) {
+            Text(
+                text = "${subject.attendancePercentage.toInt()}%",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = attendanceColor, // Dynamic color
+                modifier = Modifier.align(Alignment.CenterVertically)
+            )
 
-    } // End Root Column
+            Spacer(Modifier.width(8.dp)) // Space before icon
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = stringResource(R.string.details), // Accessibility
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                modifier = Modifier.size(20.dp) // Consistent icon size
+            )
+        }
+    } // End Row
 
     // Conditional display of the Detailed Attendance View (BottomSheet or Dialog)
     if (showDetailedView) {
-        // Ensure DetailedAttendanceView composable exists and is imported
         DetailedAttendanceView(
             subject = subject,
             onDismiss = { showDetailedView = false }
@@ -1060,6 +1050,7 @@ fun AttendanceCard(
         )
     }
 }
+
 // Helper function to generate consistent colors for subjects
 private fun generateConsistentColor(subjectCode: String): Color {
     // Simple hash function to get consistent colors
