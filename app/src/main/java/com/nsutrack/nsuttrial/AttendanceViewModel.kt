@@ -874,7 +874,7 @@ data class ProfileData(
     @SerializedName("Student Name") val studentName: String = "",
     @SerializedName("DOB") val dob: String = "",
     @SerializedName("Gender") val gender: String = "",
-    @SerializedName("Category") val category: String = "", // Add other fields as needed
+    @SerializedName("Category") val category: String = "",
     @SerializedName("Admission") val admission: String = "",
     @SerializedName("Branch Name") val branchName: String = "",
     @SerializedName("Degree") val degree: String = "",
