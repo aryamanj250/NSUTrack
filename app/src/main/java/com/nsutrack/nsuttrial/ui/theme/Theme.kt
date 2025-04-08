@@ -21,14 +21,14 @@ import com.nsutrack.nsuttrial.AttendanceViewModel
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.ui.unit.dp
 
-// Updated Material 3 color scheme for dark theme with softer colors
+
 private val SoftDarkColorScheme = darkColorScheme(
-    primary = Color(0xFF90CAF9),         // Softer blue
+    primary = Color(0xFF90CAF9),
     onPrimary = Color(0xFF0A2340),
-    primaryContainer = Color(0xFF1C3B5A), // Dark blue with reduced intensity
+    primaryContainer = Color(0xFF1C3B5A),
     onPrimaryContainer = Color(0xFFD6E4FF),
 
-    secondary = Color(0xFFBBC3FF),       // Softer purple
+    secondary = Color(0xFFBBC3FF),
     onSecondary = Color(0xFF282747),
     secondaryContainer = Color(0xFF363B64), // Muted purple container
     onSecondaryContainer = Color(0xFFE6E0FF),
