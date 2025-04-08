@@ -883,12 +883,3 @@ data class ProfileData(
     @SerializedName("Section") val section: String = ""
 )
 
-// Internal UI Data Model for Timetable
-
-// Placeholder for AttendanceRecord if not imported
-// data class AttendanceRecord(val date: String, val status: String)
-
-// Placeholder for LoginRequest if not imported
-// data class LoginRequest(val session_id: String, val uid: String, val pwd: String)
-
-// Placeholder for RetrofitClient and ApiService setup
