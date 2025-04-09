@@ -759,6 +759,10 @@ class AttendanceViewModel : ViewModel() {
             _isSessionInitialized.value = false
             _sessionId.value = null
 
+            // Clear credentials in memory
+            _storedUsername.value = null
+            _storedPassword.value = null
+
             // Clear SharedPreferences
             sharedPreferences?.edit {
                 remove("username")
