@@ -129,6 +129,7 @@ class DocumentDownloader(private val context: Context) {
 
     /**
      * Creates a file in the app's cache directory
+     * Also cleans cache if total size exceeds 10MB
      */
     private fun createFileInCache(fileName: String): File {
         val cacheDir = context.cacheDir
@@ -139,6 +140,59 @@ class DocumentDownloader(private val context: Context) {
             file.delete()
         }
 
+        // Check if cache size exceeds 10MB (10 * 1024 * 1024 bytes)
+        val maxCacheSize = 10 * 1024 * 1024 // 10MB in bytes
+        if (getCacheSize(cacheDir) > maxCacheSize) {
+            Log.d(TAG, "Cache size exceeded 10MB, clearing cache")
+            clearCache(cacheDir)
+        }
+
         return file
+    }
+
+    /**
+     * Calculates the total size of files in the given directory
+     */
+    private fun getCacheSize(directory: File): Long {
+        var size: Long = 0
+        try {
+            val files = directory.listFiles()
+            if (files != null) {
+                for (file in files) {
+                    if (file.isDirectory) {
+                        size += getCacheSize(file) // Recursively check subdirectories
+                    } else {
+                        size += file.length()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error calculating cache size", e)
+        }
+        return size
+    }
+
+    /**
+     * Clears all files in the given directory except the one being created
+     */
+    private fun clearCache(directory: File) {
+        try {
+            val files = directory.listFiles()
+            if (files != null) {
+                for (file in files) {
+                    if (file.isDirectory) {
+                        clearCache(file) // Recursively clear subdirectories
+                    } else {
+                        if (file.delete()) {
+                            Log.d(TAG, "Deleted cached file: ${file.name}")
+                        } else {
+                            Log.d(TAG, "Failed to delete: ${file.name}")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing cache", e)
+        }
     }
 }
