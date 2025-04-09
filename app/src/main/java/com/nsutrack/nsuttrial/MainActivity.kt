@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // enableEdgeToEdge() // Commented out
+         enableEdgeToEdge() // Commented out
         // WindowCompat.setDecorFitsSystemWindows(window, false) // Commented out
 
         val viewModel = ViewModelProvider(this)[AttendanceViewModel::class.java]
