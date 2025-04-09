@@ -1195,15 +1195,15 @@ private fun getSampleSchedule(baseDate: Date): List<Schedule> {
 // Calculate width for schedule card based on duration
 // Calculate width for schedule card based on duration
 private fun calculateWidth(schedule: Schedule): Float {
-    val baseWidth = 160f // Base width for a 1-hour class
-    val minWidth = if (schedule.isBreak) 100f else 160f  // Minimum width - smaller for breaks
+    val baseWidth = 160f // Base width for a 1-hour block (applies to both classes and breaks)
 
-    val durationInHours = schedule.duration / 3600f
+    // OPTION 1 (Recommended): Purely proportional width based on duration.
+    // A 60-min break will be 160f, a 30-min break will be 80f.
+    val durationInHours = schedule.duration / 3600f // Ensure floating point division
+    // Removed the scaleFactor and conditional minWidth logic.
+    // Width is now directly proportional to duration for ALL schedule types.
+    return baseWidth * durationInHours
 
-    // For breaks, use a more compressed scale
-    val scaleFactor = if (schedule.isBreak) 0.7f else 1.0f
-
-    return max(minWidth, baseWidth * durationInHours * scaleFactor)
 }
 // Define this function at file level in HomeScreen.kt (outside of any composable function)
 private fun insertBreaksBetweenClasses(schedules: List<Schedule>): List<Schedule> {
