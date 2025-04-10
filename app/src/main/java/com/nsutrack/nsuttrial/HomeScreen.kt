@@ -48,7 +48,6 @@ import com.nsutrack.nsuttrial.ui.theme.getReadableTextColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.*
-import kotlin.math.max
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
@@ -89,9 +88,6 @@ fun HomeScreen(
     val errorMessage by viewModel.errorMessage.collectAsState()
     val profileData by viewModel.profileData.collectAsState()
     // Specific loading states can be kept if needed for finer-grained UI updates
-    val isProfileLoading by viewModel.isProfileLoading.collectAsState()
-    val isTimetableLoading by viewModel.isTimetableLoading.collectAsState()
-    val timetableData by viewModel.timetableData.collectAsState()
 
     // --- Pull-to-Refresh State ---
     val pullRefreshState = rememberPullRefreshState(
@@ -358,26 +354,56 @@ fun HomeScreen(
 } // End HomeScreen Composable
 
 // The rest of your HomeScheduleSection and related functions remain the same
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) // Make sure necessary OptIns are present at file/function level
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScheduleSection(
     viewModel: AttendanceViewModel,
-    hapticFeedback: HapticFeedback.HapticHandler // Assuming you still pass this
+    hapticFeedback: HapticFeedback.HapticHandler
 ) {
     val timetableData by viewModel.timetableData.collectAsState()
     val isTimetableLoading by viewModel.isTimetableLoading.collectAsState()
     val timetableError by viewModel.timetableError.collectAsState()
+    var lastScrolledIndex by remember { mutableStateOf(-1) }
 
-    // Force refresh of current time on recomposition (use a state for updates)
+    // Auto-scroll control states
+    var lastAutoScrollTime by remember { mutableStateOf(0L) }
+    var userHasScrolled by remember { mutableStateOf(false) }
+    var lastUserScrollTime by remember { mutableStateOf(0L) }
+
+    // Force refresh of current time on recomposition
     var timeState by remember { mutableStateOf(Date()) }
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // Update time every 30 seconds (keep your timer logic)
+    // Update time every 30 seconds
     LaunchedEffect(Unit) {
         while (true) {
             timeState = Date() // Use fresh date
             delay(30000) // 30 second updates
+        }
+    }
+
+    // Detect when user manually scrolls
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { isScrolling ->
+            if (isScrolling) {
+                val currentTime = System.currentTimeMillis()
+                // Consider it user scrolling if not immediately after auto-scroll
+                if (currentTime - lastAutoScrollTime > 150) {
+                    Log.d("AutoScroll", "User manually scrolled")
+                    userHasScrolled = true
+                    lastUserScrollTime = currentTime
+                }
+            }
+        }
+    }
+
+    // Reset to auto-scrolling after 3 seconds of user inactivity
+    LaunchedEffect(userHasScrolled, lastUserScrollTime) {
+        if (userHasScrolled) {
+            delay(3000) // Wait exactly 3 seconds
+            Log.d("AutoScroll", "Resetting to auto-scroll after 3s user inactivity")
+            userHasScrolled = false
         }
     }
 
@@ -407,18 +433,16 @@ fun HomeScheduleSection(
                         Log.d("ScheduleSection", "Found ${todayClassSchedules.size} classes for $today")
                         val schedules = todayClassSchedules.mapNotNull { classSchedule ->
                             try {
-                                val timePair = parseClassTimes( // Ensure parseClassTimes is accessible
+                                val timePair = parseClassTimes(
                                     classSchedule.startTime,
                                     classSchedule.endTime,
-                                    timeState // Pass the current time state
+                                    timeState
                                 ) ?: return@mapNotNull null
 
                                 val (startTime, endTime) = timePair
-                                // Note: We no longer use generateConsistentColor here.
-                                // Color will be assigned later from the palette.
                                 val placeholderColor = Color.Gray // Temporary
 
-                                // Extract group numbers (your logic here)
+                                // Extract group numbers
                                 val groupInfo = classSchedule.group?.trim()
                                 val groupNumbers = groupInfo?.let {
                                     if (it.contains("Group", ignoreCase = true)) {
@@ -433,87 +457,98 @@ fun HomeScheduleSection(
                                     subject = classSchedule.subjectName ?: classSchedule.subject,
                                     startTime = startTime,
                                     endTime = endTime,
-                                    color = placeholderColor, // Use placeholder
+                                    color = placeholderColor,
                                     room = classSchedule.room,
                                     group = groupInfo,
-                                    groups = groupNumbers // Pass extracted groups
+                                    groups = groupNumbers
                                 )
                             } catch (e: Exception) {
                                 Log.e("ScheduleSection", "Error processing class: ${e.message}")
                                 null
                             }
                         }
-                        // Merge schedules that should be combined (ensure mergeSchedules is accessible)
+
+                        // Merge schedules that should be combined
                         var mergedSchedules = mergeSchedules(schedules).sortedBy { it.startTime }
 
-                        // *** START: New Color Assignment Logic ***
+                        // Assign colors from the palette
                         val finalMergedSchedules = mutableListOf<Schedule>()
                         var colorIndex = 0
                         for (schedule in mergedSchedules) {
-                            // Only assign palette colors to non-break schedules
                             val assignedColor = scheduleColorPalette[colorIndex % scheduleColorPalette.size]
-                            finalMergedSchedules.add(schedule.copy(color = assignedColor)) // Update color
-                            colorIndex++ // Increment index for the next non-break class
+                            finalMergedSchedules.add(schedule.copy(color = assignedColor))
+                            colorIndex++
                         }
-                        mergedSchedules = finalMergedSchedules // Update the list with assigned colors
-                        // *** END: New Color Assignment Logic ***
+                        mergedSchedules = finalMergedSchedules
 
-                        // Add breaks between classes (ensure insertBreaksBetweenClasses is accessible)
-                        // This happens *after* colors are assigned to classes. Breaks get their default color.
+                        // Add breaks between classes
                         processedSchedules = insertBreaksBetweenClasses(mergedSchedules)
 
                         Log.d("ScheduleSection", "Final schedule count with breaks: ${processedSchedules.size}")
-
                     } else {
                         Log.d("ScheduleSection", "No schedules found for $today")
-                        // processedSchedules remains emptyList()
                     }
                 } else {
                     Log.d("ScheduleSection", "Timetable data is null")
-                    // processedSchedules remains emptyList()
                 }
-                // Update the state with the processed schedule (or empty list)
+
+                // Update the state with the processed schedule
                 todaySchedule = processedSchedules
             } catch (e: Exception) {
                 Log.e("ScheduleSection", "Error processing schedule data: ${e.message}")
                 e.printStackTrace()
-                // Ensure schedule is empty on error
                 todaySchedule = emptyList()
             }
         }
     }
 
-    // Improved auto-scrolling logic with delay (Keep your logic)
-    LaunchedEffect(todaySchedule, timeState) {
-        if (todaySchedule.isNotEmpty()) {
-            delay(300) // Allow composition time
-            val freshCurrentTime = timeState // Use the updated state time
-            // Find target class logic remains the same
-            val currentClass = todaySchedule.firstOrNull { !it.isBreak && it.isCurrentTime(freshCurrentTime) } // Prioritize non-breaks for scroll
+    // Enhanced auto-scrolling logic that respects user scrolling
+    LaunchedEffect(todaySchedule, timeState, userHasScrolled) {
+        // Only perform auto-scroll when schedule has data and user isn't actively scrolling
+        if (todaySchedule.isNotEmpty() && !userHasScrolled) {
+            val freshCurrentTime = timeState
+
+            // Find the class currently happening or the next upcoming class (non-breaks preferred)
+            val currentClass = todaySchedule.firstOrNull { !it.isBreak && it.isCurrentTime(freshCurrentTime) }
             val nearestUpcoming = if (currentClass == null) {
-                todaySchedule.filter { !it.isBreak && it.startTime.after(freshCurrentTime) } // Focus scroll on actual classes
+                todaySchedule.filter { !it.isBreak && it.startTime.after(freshCurrentTime) }
                     .minByOrNull { it.startTime.time - freshCurrentTime.time }
             } else null
 
             val targetClass = currentClass ?: nearestUpcoming
-            if (targetClass != null) {
-                val index = todaySchedule.indexOf(targetClass)
-                if (index >= 0) {
-                    Log.d("AutoScroll", "Scrolling to index $index for target: ${targetClass.subject}")
-                    try { listState.animateScrollToItem(index) } catch (e: Exception) { Log.e("AutoScroll", "Scroll error", e) }
-                } else {
-                    Log.d("AutoScroll", "Target class ${targetClass.subject} not found in final list")
-                }
+
+            // Calculate the index of the target class in the processed list
+            val newTargetIndex = if (targetClass != null) {
+                todaySchedule.indexOf(targetClass)
             } else {
-                Log.d("AutoScroll", "No current or upcoming class found to scroll to.")
+                -1 // No specific class to scroll to
+            }
+
+            // Scroll if there's a valid target that's different from last scrolled
+            if (newTargetIndex >= 0 && (newTargetIndex != lastScrolledIndex || !userHasScrolled)) {
+                Log.d("AutoScroll", "Auto-scrolling to index $newTargetIndex: ${targetClass?.subject}")
+                try {
+                    lastAutoScrollTime = System.currentTimeMillis() // Record auto-scroll time
+                    listState.animateScrollToItem(newTargetIndex)
+                    lastScrolledIndex = newTargetIndex
+                } catch (e: Exception) {
+                    Log.e("AutoScroll", "Scroll error to index $newTargetIndex", e)
+                }
+            } else if (newTargetIndex >= 0) {
+                // Already scrolled to the correct position
+                Log.d("AutoScroll", "Already at correct position: ${targetClass?.subject}")
+            } else {
+                if (lastScrolledIndex != -1) {
+                    lastScrolledIndex = -1 // Reset since there's no valid target
+                    Log.d("AutoScroll", "No valid target to scroll to")
+                }
             }
         }
     }
 
-    // --- UI (Remains the same structure as your provided code) ---
+    // UI Structure
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = Modifier.fillMaxWidth()
     ) {
         // Section header with icon and loading indicator
         Row(
@@ -523,7 +558,7 @@ fun HomeScheduleSection(
                 .padding(horizontal = 16.dp)
         ) {
             Text(
-                text = stringResource(R.string.schedule), // Use updated string if needed
+                text = stringResource(R.string.schedule),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
@@ -570,12 +605,12 @@ fun HomeScheduleSection(
                 loading -> {
                     Box(modifier = Modifier
                         .fillMaxWidth()
-                        .height(95.dp) // Match the 'No classes' card height
+                        .height(95.dp)
                         .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(15.dp)) // Clip shape for consistency
+                        .clip(RoundedCornerShape(15.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                     ) {
-                        // Optional: Add a Shimmer effect here later
+                        // Optional: Shimmer effect could be added here
                     }
                 }
 
@@ -586,34 +621,33 @@ fun HomeScheduleSection(
                             .fillMaxWidth()
                             .height(95.dp)
                             .padding(horizontal = 16.dp)
-                            .animateContentSize(), // Animate size changes smoothly
+                            .animateContentSize(),
                         shape = RoundedCornerShape(15.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat look
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center // Center content vertically and horizontally
+                            contentAlignment = Alignment.Center
                         ) {
-                            // Column to stack the two text lines
                             Column(
-                                horizontalAlignment = Alignment.CenterHorizontally, // Center text within the column
-                                verticalArrangement = Arrangement.Center // Center vertically too
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    text = stringResource(R.string.no_classes_today), // "No classes scheduled today! 🎉"
+                                    text = stringResource(R.string.no_classes_today),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.bodyLarge,
                                     textAlign = TextAlign.Center,
                                     fontWeight = FontWeight.Medium
                                 )
-                                Spacer(modifier = Modifier.height(4.dp)) // Small space between lines
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = stringResource(R.string.your_day_is_clear), // "Your day is clear"
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f), // Slightly less prominent
-                                    style = MaterialTheme.typography.bodyMedium, // Slightly smaller style
+                                    text = stringResource(R.string.your_day_is_clear),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                    style = MaterialTheme.typography.bodyMedium,
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -625,7 +659,7 @@ fun HomeScheduleSection(
                 else -> {
                     Box(
                         modifier = Modifier
-                            .height(110.dp) // Your defined height for the schedule row
+                            .height(110.dp)
                             .fillMaxWidth()
                     ) {
                         LazyRow(
@@ -636,13 +670,13 @@ fun HomeScheduleSection(
                         ) {
                             items(
                                 items = todaySchedule,
-                                key = { it.id } // Use stable keys
+                                key = { it.id }
                             ) { schedule ->
-                                val isCurrentClass = schedule.isCurrentTime(timeState) // Check against state time
+                                val isCurrentClass = schedule.isCurrentTime(timeState)
 
-                                // Apply scaling animation to current class (ensure animation states are defined)
+                                // Apply scaling animation to current class
                                 val scale by animateFloatAsState(
-                                    targetValue = if (isCurrentClass && !schedule.isBreak) 1.05f else 1f, // Only scale non-breaks
+                                    targetValue = if (isCurrentClass && !schedule.isBreak) 1.05f else 1f,
                                     animationSpec = spring(
                                         dampingRatio = Spring.DampingRatioMediumBouncy,
                                         stiffness = Spring.StiffnessLow
@@ -650,34 +684,31 @@ fun HomeScheduleSection(
                                     label = "Class card scale"
                                 )
 
-                                // Call your existing card composable (ensure it's accessible)
-                                // Pass the schedule with the *assigned* palette color
+                                // Call card composable
                                 HomeScheduleCard(
                                     schedule = schedule,
-                                    width = calculateWidth(schedule), // Ensure calculateWidth is accessible
+                                    width = calculateWidth(schedule),
                                     isCurrentClass = isCurrentClass,
                                     animationScale = scale
                                 )
                             }
                         }
 
-                        // Red line indicator (ensure RedLineIndicator & calculateRedLinePosition are accessible)
-                        // Calculate position based on updated time state
+                        // Red line indicator
                         val redLinePosition = calculateRedLinePosition(timeState)
                         if (redLinePosition > 0) {
                             RedLineIndicator(position = redLinePosition)
                         }
                     }
                 }
-            } // End When
-        } // End Crossfade
-    } // End Column
+            }
+        }
+    }
 
-    // Force fetch timetable data when this component is first displayed (keep your logic)
+    // Force fetch timetable data when component first displayed
     LaunchedEffect(Unit) {
         if (timetableData == null && !isTimetableLoading) {
-            // Consider using the forceRefresh parameter if needed based on your logic
-            viewModel.fetchTimetableData(forceRefresh = false) // Or true if needed on initial composition
+            viewModel.fetchTimetableData(forceRefresh = false)
         }
     }
 }
