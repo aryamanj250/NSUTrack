@@ -406,18 +406,7 @@ fun RedLineIndicator(position: Float) {
             .fillMaxHeight(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .width(2.dp)
-                .fillMaxHeight(0.6f)
-                .background(MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
-        )
 
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.error)
-        )
+
     }
 }

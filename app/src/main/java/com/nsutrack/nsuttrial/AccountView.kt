@@ -1,7 +1,6 @@
 package com.nsutrack.nsuttrial
 
-import android.content.Intent // <-- Import Intent
-import android.net.Uri // <-- Import Uri
+import android.content.Intent
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
@@ -17,20 +16,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
-// Icon for logout button is removed, so ExitToApp is no longer needed here
-// import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.*
-import androidx.compose.material3.HorizontalDivider // Explicit import if needed, often covered by material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color // Keep import, might be needed elsewhere or for custom colors later
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext // <-- Import LocalContext
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -41,13 +37,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.core.net.toUri
 
+// Define custom easing curves for smooth animations
+private val SmoothDecelerateEasing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+private val SmoothAccelerateEasing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
 
-/**
- * Google-styled Profile View with simplified animations and modified logout/contact buttons
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountView(
@@ -58,72 +54,73 @@ fun AccountView(
     val profileData by viewModel.profileData.collectAsState()
     val isLoading by viewModel.isProfileLoading.collectAsState()
     val errorMessage by viewModel.profileError.collectAsState()
-    // Assuming HapticFeedback is correctly set up in your project's context
     val hapticFeedback = HapticFeedback.getHapticFeedback()
     val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current // <-- Get context for Intent
-
-    // Get window size for precise calculations
+    val context = LocalContext.current
     val view = LocalView.current
     val density = LocalDensity.current
 
-    // Animation state for entry/exit
-    val visible = remember {
-        MutableTransitionState(false).apply {
-            targetState = true
-        }
-    }
-
-    // Sheet states
+    // Define sheet states - Only Expanded (visible) and Hidden
     val EXPANDED = 0
-    val HALF_EXPANDED = 1
     val HIDDEN = 2
 
-    // Handle back button
-    BackHandler {
-        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+    // Animation state for entry/exit
+    val visible = remember { MutableTransitionState(false) }
+
+    // Sheet state and drag state - Start in EXPANDED state
+    var sheetState by remember { mutableStateOf(EXPANDED) }
+    var dragOffset by remember { mutableStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+    var velocityTracker by remember { mutableStateOf(0f) }
+
+    // Trigger visibility animation shortly after composition
+    LaunchedEffect(Unit) {
+        delay(50) // Small delay before starting animation
+        visible.targetState = true
+    }
+
+    // Common dismiss logic
+    val dismissSheet: () -> Unit = {
         coroutineScope.launch {
+            sheetState = HIDDEN // Ensure state changes first
             visible.targetState = false
-            delay(200) // Keep delay consistent with animations
+            // Use exit animation duration for delay
+            delay(300) // Match the slideOutVertically duration
             onDismiss()
         }
     }
 
-    // Google-style animation curves (more subtle)
-    val standardEasing = FastOutSlowInEasing
+    // Handle back button press
+    BackHandler {
+        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+        dismissSheet()
+    }
 
-    // Dialog
     Dialog(
         onDismissRequest = {
-            coroutineScope.launch {
-                visible.targetState = false
-                delay(200)
-                onDismiss()
-            }
+            // Also handle dismiss request (e.g., system back gesture)
+            dismissSheet()
         },
         properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = false, // Keep false to prevent accidental dismiss
+            dismissOnBackPress = true, // Should trigger BackHandler
+            dismissOnClickOutside = false, // Prevent accidental dismiss
             usePlatformDefaultWidth = false
         )
     ) {
-        // Track sheet state
-        var sheetState by remember { mutableStateOf(HALF_EXPANDED) }
-        var isDragging by remember { mutableStateOf(false) }
-        var dragOffset by remember { mutableStateOf(0f) }
-        var velocityTracker by remember { mutableStateOf(0f) }
+        var screenHeight by remember { mutableStateOf(0) } // Store screen height
 
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.BottomCenter
         ) {
-            // Scrim animation
+            // Scrim animation (simplified)
             val scrimAlpha by animateFloatAsState(
-                targetValue = if (sheetState == EXPANDED) 0.6f else if (sheetState == HALF_EXPANDED) 0.4f else 0f,
-                animationSpec = tween(200, easing = standardEasing),
+                targetValue = if (sheetState == EXPANDED) 0.6f else 0f, // Only depends on expanded state
+                animationSpec = tween(300), // Match exit duration
                 label = "ScrimAlpha"
             )
 
+            // Clickable Scrim Background
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -132,20 +129,9 @@ fun AccountView(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {
+                        // Click outside dismisses the sheet
                         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                        if (sheetState == EXPANDED) {
-                            coroutineScope.launch {
-                                sheetState = HALF_EXPANDED
-                            }
-                        } else {
-                            coroutineScope.launch {
-                                sheetState = HIDDEN
-                                delay(150)
-                                visible.targetState = false
-                                delay(150) // Match exit animation timings
-                                onDismiss()
-                            }
-                        }
+                        dismissSheet()
                     }
             )
 
@@ -153,23 +139,24 @@ fun AccountView(
             AnimatedVisibility(
                 visible = visible.targetState,
                 enter = slideInVertically(
-                    initialOffsetY = { it },
-                    animationSpec = spring(
-                        dampingRatio = 0.9f, // Slightly less bounce
-                        stiffness = 350f, // Slightly adjusted stiffness
-                        visibilityThreshold = null
+                    initialOffsetY = { it }, // Start from bottom
+                    animationSpec = tween(
+                        durationMillis = 400, // Duration for smooth entry
+                        easing = SmoothDecelerateEasing // Custom decelerate curve
                     )
-                ) + fadeIn(animationSpec = tween(150)),
+                ) + fadeIn(animationSpec = tween(150)), // Quick fade in
                 exit = slideOutVertically(
-                    targetOffsetY = { it },
-                    animationSpec = tween(150, easing = standardEasing)
-                ) + fadeOut(tween(120))
+                    targetOffsetY = { it }, // Slide down
+                    animationSpec = tween(
+                        durationMillis = 300, // Exit duration
+                        easing = SmoothAccelerateEasing // Custom accelerate curve
+                    )
+                ) + fadeOut(tween(100)) // Faster fade out
             ) {
-                var screenHeight by remember { mutableStateOf(0) }
-
+                // Calculate sheet height based on state (85% or 0)
                 val sheetHeightFraction by animateFloatAsState(
-                    targetValue = if (sheetState == EXPANDED) 0.90f else if (sheetState == HALF_EXPANDED) 0.75f else 0f,
-                    animationSpec = spring(
+                    targetValue = if (sheetState == EXPANDED) 0.85f else 0f,
+                    animationSpec = spring( // Use spring for height change during drag/dismiss for feel
                         dampingRatio = 0.8f,
                         stiffness = 400f,
                         visibilityThreshold = 0.001f
@@ -180,82 +167,72 @@ fun AccountView(
                 val sheetHeightPx = if (screenHeight > 0) {
                     (screenHeight * sheetHeightFraction).roundToInt()
                 } else {
-                    0 // Avoid division by zero or invalid height initially
+                    0 // Avoid division by zero initially
                 }
+
+                // Animate corner radius (subtle polish during dismiss drag)
+                val cornerRadius by animateDpAsState(
+                    targetValue = if (sheetState == EXPANDED) 16.dp else 24.dp,
+                    animationSpec = tween(200),
+                    label = "SheetCornerRadius"
+                )
 
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        // Calculate height dynamically, ensuring it doesn't exceed 90%
-                        .height(with(density) { (sheetHeightPx.coerceAtMost((screenHeight * 0.90f).toInt())).toDp() })
+                        // Set height, ensuring it doesn't exceed 85%
+                        .height(with(density) { (sheetHeightPx.coerceAtMost((screenHeight * 0.85f).toInt())).toDp() })
                         .offset { IntOffset(0, dragOffset.roundToInt()) }
                         .onSizeChanged {
-                            if (screenHeight == 0) { // Get height only once
+                            // Capture screen height once
+                            if (screenHeight == 0) {
                                 screenHeight = view.height
                             }
                         }
                         .graphicsLayer {
-                            shadowElevation = 4f
-                            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                            shadowElevation = 4f // Consistent shadow
+                            shape = RoundedCornerShape(topStart = cornerRadius, topEnd = cornerRadius)
                             clip = true
                         },
                     color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 2.dp // Subtle elevation
+                    tonalElevation = 2.dp
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        // Draggable header
+                        // Draggable header area
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .pointerInput(Unit) {
                                     detectVerticalDragGestures(
-                                        onDragStart = { isDragging = true },
+                                        onDragStart = {
+                                            isDragging = true
+                                            // Optional: Tiny haptic feedback on drag start
+                                            // hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.TOUCH)
+                                        },
                                         onDragEnd = {
                                             isDragging = false
                                             coroutineScope.launch {
                                                 val currentVelocity = velocityTracker
-                                                val velocityThreshold = 250f
-                                                val offsetThreshold = 30f // Pixels to trigger state change
+                                                // Thresholds for dismissing downwards
+                                                val velocityDismissThreshold = 350f
+                                                val offsetDismissThreshold = 80f // Needs to be dragged down this much
 
-                                                // Determine target state based on velocity and offset
-                                                val targetState = when {
-                                                    currentVelocity > velocityThreshold * 1.5f && sheetState == HALF_EXPANDED -> HIDDEN
-                                                    currentVelocity > velocityThreshold && sheetState == EXPANDED -> HALF_EXPANDED
-                                                    currentVelocity < -velocityThreshold && sheetState == HALF_EXPANDED -> EXPANDED
-                                                    dragOffset > offsetThreshold * 2 && sheetState == HALF_EXPANDED -> HIDDEN
-                                                    dragOffset > offsetThreshold && sheetState == EXPANDED -> HALF_EXPANDED
-                                                    dragOffset < -offsetThreshold && sheetState == HALF_EXPANDED -> EXPANDED
-                                                    else -> sheetState // Snap back to current state
-                                                }
-
-                                                // Perform haptic feedback based on state change
-                                                if (targetState != sheetState) {
-                                                    val feedbackType = when (targetState) {
-                                                        HIDDEN -> HapticFeedback.FeedbackType.MEDIUM
-                                                        else -> HapticFeedback.FeedbackType.LIGHT
+                                                when {
+                                                    // Check if drag/velocity meets dismiss criteria
+                                                    currentVelocity > velocityDismissThreshold || dragOffset > offsetDismissThreshold -> {
+                                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                                        // Trigger the common dismiss logic
+                                                        dismissSheet()
                                                     }
-                                                    hapticFeedback.performHapticFeedback(feedbackType)
-                                                }
-
-                                                // Animate drag offset back to zero if not changing state
-                                                if (targetState == sheetState && dragOffset != 0f) {
-                                                    animate(
-                                                        initialValue = dragOffset, targetValue = 0f,
-                                                        animationSpec = spring(dampingRatio = 0.8f, stiffness = 500f)
-                                                    ) { value, _ -> dragOffset = value }
-                                                } else {
-                                                    // Apply target state
-                                                    sheetState = targetState
-                                                    // If hiding, trigger dismiss flow
-                                                    if (sheetState == HIDDEN) {
-                                                        delay(150)
-                                                        visible.targetState = false
-                                                        delay(150) // Allow exit animation
-                                                        onDismiss()
+                                                    // Otherwise, snap back to 0 offset
+                                                    else -> {
+                                                        animate(
+                                                            initialValue = dragOffset,
+                                                            targetValue = 0f,
+                                                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 500f)
+                                                        ) { value, _ -> dragOffset = value }
                                                     }
                                                 }
-                                                // Reset drag offset smoothly if state didn't change immediately to HIDDEN
-                                                if (targetState != HIDDEN) dragOffset = 0f
                                                 velocityTracker = 0f // Reset velocity
                                             }
                                         },
@@ -271,36 +248,29 @@ fun AccountView(
                                             }
                                         },
                                         onVerticalDrag = { change, dragAmount ->
-                                            change.consume() // Consume the event
+                                            change.consume() // Consume the drag event
 
-                                            // Calculate drag resistance based on state and direction
-                                            val resistanceFactor = when {
-                                                // Stronger resistance pulling down when expanded
-                                                sheetState == EXPANDED && dragAmount > 0 -> 0.4f
-                                                // Slightly more resistance pulling up from half-expanded
-                                                sheetState == HALF_EXPANDED && dragAmount < 0 -> 0.6f
-                                                // Standard resistance pulling down from half-expanded
-                                                sheetState == HALF_EXPANDED && dragAmount > 0 -> 0.8f
-                                                else -> 1.0f // No resistance if moving towards allowed direction
-                                            }
+                                            // Apply resistance when trying to drag UP (negative dragAmount)
+                                            val resistanceFactor = if (dragAmount < 0) 0.3f else 1.0f
 
-                                            // Apply drag with resistance
+                                            // Update velocity tracker
+                                            velocityTracker = 0.7f * velocityTracker + 0.3f * dragAmount * (1000f / 16f) // Rough velocity
+
+                                            // Calculate new offset with resistance
                                             val newOffset = dragOffset + dragAmount * resistanceFactor
 
-                                            // Add velocity tracking (simple moving average)
-                                            velocityTracker = 0.7f * velocityTracker + 0.3f * dragAmount * (1000f / 16f) // Rough velocity calculation
-
-                                            // Apply moderated offset, allow slight overdrag
-                                            dragOffset = newOffset.coerceIn(-60f, screenHeight * 0.2f) // Allow some overdrag
-
+                                            // Clamp dragOffset: Prevent significant upward drag, allow downward drag
+                                            val maxDownwardDrag = if (screenHeight > 0) screenHeight * 0.3f else 200f // Allow dragging down ~30%
+                                            dragOffset = newOffset.coerceIn(-30f, maxDownwardDrag) // Clamp between -30f (up) and maxDownwardDrag (down)
                                         }
                                     )
                                 }
                         ) {
+                            // Header Content (Handle, Title) - No structural changes needed
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 8.dp), // Padding below handle/title
+                                    .padding(bottom = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 // Drag Handle
@@ -330,20 +300,22 @@ fun AccountView(
                             }
                         }
 
-                        // Divider
+                        // Divider - No structural changes needed
                         HorizontalDivider(
-                            modifier = Modifier.fillMaxWidth(), // No horizontal padding
-                            thickness = 0.5.dp, // Thinner divider
+                            modifier = Modifier.fillMaxWidth(),
+                            thickness = 0.5.dp,
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                         )
 
-                        // Content area
+                        // Main Content Area (LazyColumn)
                         Box(
                             modifier = Modifier
                                 .weight(1f) // Takes remaining space
                                 .fillMaxWidth()
                         ) {
+                            // Conditional content based on loading/error/data state
                             when {
+                                // Loading State
                                 isLoading -> {
                                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                         CircularProgressIndicator(
@@ -353,9 +325,10 @@ fun AccountView(
                                         )
                                     }
                                 }
-
+                                // Error State
                                 errorMessage != null -> {
                                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        // ... (Error Column with Text and Retry Button - unchanged) ...
                                         Column(
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             modifier = Modifier.padding(24.dp)
@@ -386,21 +359,21 @@ fun AccountView(
                                         }
                                     }
                                 }
-
+                                // Data Loaded State
                                 profileData != null -> {
                                     LazyColumn(
                                         modifier = Modifier.fillMaxSize(),
                                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
-                                        // Spacing between items (Sections, Buttons)
                                         verticalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
+                                        // Profile Header Item
                                         item {
                                             ProfileHeader(
                                                 profileData?.studentName ?: "N/A",
                                                 profileData?.studentID ?: "N/A"
                                             )
                                         }
-
+                                        // Personal Info Section Item
                                         item {
                                             ProfileSection(
                                                 title = "Personal Information",
@@ -413,7 +386,7 @@ fun AccountView(
                                                 }
                                             )
                                         }
-
+                                        // Academic Info Section Item
                                         item {
                                             ProfileSection(
                                                 title = "Academic Information",
@@ -421,117 +394,87 @@ fun AccountView(
                                                 content = {
                                                     ProfileRow("Degree", profileData?.degree ?: "N/A")
                                                     ProfileRow("Branch", profileData?.branchName ?: "N/A")
-
-                                                    // Conditionally show Specialization
                                                     if (profileData?.specialization?.uppercase() != profileData?.branchName?.uppercase() &&
                                                         profileData?.specialization?.isNotBlank() == true
                                                     ) {
                                                         ProfileRow("Specialization", profileData?.specialization ?: "N/A")
                                                     }
-
                                                     ProfileRow("Section", profileData?.section ?: "N/A")
                                                 }
                                             )
                                         }
-
-                                        // --- NEW: Contact Us Button Item ---
+                                        // Contact Us Button Item
                                         item {
                                             Button(
-                                                onClick = {
-                                                    // Haptic feedback for interaction
+                                                onClick = { /* ... (Intent logic unchanged) ... */
                                                     hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                                                    // Create Intent to open URL
                                                     val url = "https://nsutrack.systems"
                                                     val intent = Intent(Intent.ACTION_VIEW)
-                                                    intent.data = Uri.parse(url)
-                                                    try {
-                                                        context.startActivity(intent)
-                                                    } catch (e: Exception) {
-                                                        // Handle cases where no browser is available or other errors
-                                                        Log.e("AccountView", "Could not launch URL $url", e)
-                                                        // Optionally show a Toast message to the user
-                                                    }
+                                                    intent.data = url.toUri()
+                                                    try { context.startActivity(intent) } catch (e: Exception) { Log.e("AccountView", "Could not launch URL $url", e) }
                                                 },
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(horizontal = 32.dp, vertical = 4.dp), // Match Logout style
-                                                // Bluish background, matching text color
+                                                    .padding(horizontal = 32.dp, vertical = 4.dp),
                                                 colors = ButtonDefaults.buttonColors(
                                                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                                                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                                                 ),
-                                                shape = RoundedCornerShape(12.dp), // Match Logout style
-                                                elevation = null // Match Logout style (flat)
+                                                shape = RoundedCornerShape(12.dp),
+                                                elevation = null
                                             ) {
-                                                Text(
-                                                    text = "Contact Us",
-                                                    style = MaterialTheme.typography.labelLarge,
-                                                    fontWeight = FontWeight.Medium
-                                                )
+                                                Text("Contact Us", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
                                             }
                                         }
-                                        // --- END OF Contact Us Button Item ---
-
-
-                                        // --- Logout Button Item ---
-                                        // Spacing between this and Contact Us is handled by LazyColumn's verticalArrangement
+                                        // Logout Button Item
                                         item {
                                             Button(
                                                 onClick = {
                                                     hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
+                                                    // Trigger dismiss FIRST, then logout
+                                                    dismissSheet()
                                                     coroutineScope.launch {
+                                                        // Delay slightly longer than dismiss animation
+                                                        delay(350)
                                                         viewModel.logout()
-                                                        visible.targetState = false
-                                                        delay(150)
-                                                        onDismiss()
-                                                        onLogout()
+                                                        onLogout() // Call logout callback after dismiss animation finishes
                                                     }
                                                 },
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .padding(horizontal = 32.dp, vertical = 4.dp),
                                                 colors = ButtonDefaults.buttonColors(
-                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant, // Muted background
-                                                    contentColor = MaterialTheme.colorScheme.error // Red text
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                    contentColor = MaterialTheme.colorScheme.error
                                                 ),
                                                 shape = RoundedCornerShape(12.dp),
                                                 elevation = null
                                             ) {
-                                                Text(
-                                                    text = "Logout",
-                                                    style = MaterialTheme.typography.labelLarge,
-                                                    fontWeight = FontWeight.Medium
-                                                )
+                                                Text("Logout", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
                                             }
-                                            // Add space *after* the last button for bottom padding
-                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Spacer(modifier = Modifier.height(16.dp)) // Space after last button
                                         }
-                                        // --- END OF Logout Button Item ---
-                                    }
+                                    } // End LazyColumn
                                 }
-
-                                else -> { // Fallback if data is null
+                                // Fallback for null data
+                                else -> {
                                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        Text(
-                                            "No profile data available.",
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            style = MaterialTheme.typography.bodyLarge
-                                        )
+                                        Text("No profile data available.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                                     }
                                 }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+                            } // End When
+                        } // End Content Box
+                    } // End Main Column
+                } // End Surface
+            } // End AnimatedVisibility
+        } // End Root Box
+    } // End Dialog
+} // End AccountView Composable
 
-// --- Helper Composables (ProfileHeader, ProfileSection, ProfileRow) remain the same ---
-
+// --- Helper Composables (ProfileHeader, ProfileSection, ProfileRow) ---
+// These remain unchanged from your provided code. Ensure they are present below.
 @Composable
-fun ProfileHeader(name: String, studentId: String) {
+fun ProfileHeader(name: String, studentId: String) { /* ... (Your existing code) ... */
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -609,13 +552,12 @@ fun ProfileHeader(name: String, studentId: String) {
         }
     }
 }
-
 @Composable
 fun ProfileSection(
     title: String,
     icon: ImageVector,
-    content: @Composable ColumnScope.() -> Unit // Use ColumnScope for content
-) {
+    content: @Composable ColumnScope.() -> Unit
+) { /* ... (Your existing code) ... */
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -663,10 +605,8 @@ fun ProfileSection(
         }
     }
 }
-
-
 @Composable
-fun ProfileRow(label: String, value: String) {
+fun ProfileRow(label: String, value: String) { /* ... (Your existing code) ... */
     var isVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         delay(50) // Quick delay for stagger effect
@@ -726,9 +666,8 @@ fun ProfileRow(label: String, value: String) {
 }
 
 // --- Utility Functions ---
-
-// Updated formatter, keeping capitalize logic but removing Mode handling
-fun formatProfileValue(label: String, value: String): String {
+// These remain unchanged from your provided code. Ensure they are present below.
+fun formatProfileValue(label: String, value: String): String { /* ... (Your existing code) ... */
     if (value.isBlank() || value.equals("N/A", ignoreCase = true)) return "N/A" // Handle empty/NA case
 
     return when (label) {
@@ -746,10 +685,6 @@ fun formatProfileValue(label: String, value: String): String {
         else -> value.lowercase().capitalizeWord() // Default: Capitalize first letter
     }
 }
-
-// Renamed extension function for clarity
-fun String.capitalizeWord(): String {
+fun String.capitalizeWord(): String { /* ... (Your existing code) ... */
     return this.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 }
-
-// REMOVED Placeholder HapticFeedback object - Ensure you have a real implementation or import

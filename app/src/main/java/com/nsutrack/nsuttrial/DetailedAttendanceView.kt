@@ -58,6 +58,10 @@ fun DetailedAttendanceView(
     // Get window size for precise calculations
     val view = LocalView.current
     val density = LocalDensity.current
+    val SmoothDecelerateEasing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+
+// Optional: A complementary curve for the exit animation (emphasized accelerate)
+    val SmoothAccelerateEasing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
 
     // Get current date to filter past records
     val currentDate = remember { Date() }
@@ -142,21 +146,22 @@ fun DetailedAttendanceView(
 
     // Define sheet states - use Int to avoid type issues
     val EXPANDED = 0
-    val HALF_EXPANDED = 1
+
     val HIDDEN = 2
 
     // Animation state for entry/exit
     val visible = remember { MutableTransitionState(false) }
 
     // Sheet state and drag state
-    var sheetState by remember { mutableStateOf(HALF_EXPANDED) }
+    var sheetState by remember { mutableStateOf(EXPANDED) }
     var dragOffset by remember { mutableStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
     var velocityTracker by remember { mutableStateOf(0f) }
 
+
     // Animation curves
     val standardEasing = FastOutSlowInEasing
-    val emphasizedEasing = CubicBezierEasing(0.1f, 0.7f, 0.1f, 1.0f)
+    //val emphasizedEasing = CubicBezierEasing(0.1f, 0.7f, 0.1f, 1.0f)
 
     LaunchedEffect(Unit) {
         delay(50)
@@ -177,8 +182,9 @@ fun DetailedAttendanceView(
     Dialog(
         onDismissRequest = {
             coroutineScope.launch {
+                sheetState = HIDDEN // Trigger state change first
                 visible.targetState = false
-                delay(200)
+                delay(200) // Match exit animation
                 onDismiss()
             }
         },
@@ -194,7 +200,8 @@ fun DetailedAttendanceView(
         ) {
             // Scrim with animation
             val scrimAlpha by animateFloatAsState(
-                targetValue = if (sheetState == EXPANDED) 0.65f else if (sheetState == HALF_EXPANDED) 0.5f else 0f,
+                // *** Simplified: Only depends on EXPANDED or not ***
+                targetValue = if (sheetState == EXPANDED) 0.65f else 0f,
                 animationSpec = tween(200, easing = standardEasing),
                 label = "ScrimAlpha"
             )
@@ -207,19 +214,14 @@ fun DetailedAttendanceView(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {
+                        // *** Click outside dismisses directly ***
                         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                        if (sheetState == EXPANDED) {
-                            coroutineScope.launch {
-                                sheetState = HALF_EXPANDED
-                            }
-                        } else {
-                            coroutineScope.launch {
-                                sheetState = HIDDEN
-                                delay(150)
-                                visible.targetState = false
-                                delay(150)
-                                onDismiss()
-                            }
+                        coroutineScope.launch {
+                            sheetState = HIDDEN
+                            delay(150)
+                            visible.targetState = false
+                            delay(150)
+                            onDismiss()
                         }
                     }
             )
@@ -229,56 +231,73 @@ fun DetailedAttendanceView(
                 visible = visible.targetState,
                 enter = slideInVertically(
                     initialOffsetY = { it },
-                    animationSpec = spring(
-                        dampingRatio = 0.9f,
-                        stiffness = 300f,
-                        visibilityThreshold = null
+                    // *** Use tween with the custom easing curve ***
+                    animationSpec = tween(
+                        durationMillis = 400, // Slightly longer duration for smoother deceleration
+                        easing = SmoothDecelerateEasing // Apply the custom curve
                     )
                 ) + fadeIn(
+                    // Keep fade-in relatively short
                     animationSpec = tween(150)
                 ),
                 exit = slideOutVertically(
                     targetOffsetY = { it },
-                    animationSpec = tween(180, easing = standardEasing)
-                ) + fadeOut(tween(150))
-            ) {
+                    // *** Use the complementary custom easing for exit ***
+                    animationSpec = tween(
+                        durationMillis = 300, // Exit can be slightly faster
+                        easing = SmoothAccelerateEasing // Apply custom accelerate curve
+                        // Alternative: FastOutLinearInEasing might still be fine
+                    )
+                ) + fadeOut(
+                    // Faster fade-out on exit
+                    tween(100)
+                )
+            )  {
                 // Get the exact screen height to calculate precise sheet height
-                var screenHeight by remember { mutableStateOf(0) }
+                var screenHeight by remember { mutableIntStateOf(0) }
 
                 // Sheet height with precise calculation based on screen size
                 val sheetHeightFraction by animateFloatAsState(
-                    targetValue = if (sheetState == EXPANDED) 0.90f else if (sheetState == HALF_EXPANDED) 0.8f else 0f,
-                    animationSpec = spring(
+                    // *** MODIFIED VALUES ***
+                    // Expanded state covers 75%
+                    // Half-Expanded (initial resting state) covers 60%
+                    targetValue = if (sheetState == EXPANDED) 0.85f else 0f,
+                    animationSpec = spring( // Keep spring for nice feel
                         dampingRatio = 0.7f,
                         stiffness = 300f,
                         visibilityThreshold = 0.001f
                     ),
                     label = "SheetHeight"
                 )
-
-                // Calculated exact height in pixels
                 val sheetHeightPx = if (screenHeight > 0) {
                     (screenHeight * sheetHeightFraction).roundToInt()
                 } else {
                     0
                 }
 
+                // *** MOVE AnimateDpAsState HERE (outside graphicsLayer) ***
+                val cornerRadius by animateDpAsState(
+                    targetValue = if (sheetState == EXPANDED) 16.dp else 24.dp, // Adjust as desired
+                    animationSpec = tween(200),
+                    label = "SheetCornerRadius"
+                )
+
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(with(density) { (sheetHeightPx.coerceAtMost((screenHeight * 0.92f).toInt())).toDp() })
+                        .height(with(density) { (sheetHeightPx.coerceAtMost((screenHeight * 0.85f).toInt())).toDp() })
                         .offset { IntOffset(0, dragOffset.roundToInt()) }
                         .onSizeChanged {
-                            // Store the screen height for precise calculations
                             if (screenHeight == 0) {
                                 screenHeight = view.height
                             }
                         }
                         .graphicsLayer {
-                            this.shadowElevation = if (sheetState == EXPANDED) 8f else 4f
+                            // *** Use fixed or animated corner radius ***
+                            this.shadowElevation = 8f // Consistent shadow for expanded state
                             this.shape = RoundedCornerShape(
-                                topStart = if (sheetState == EXPANDED) 16.dp else 28.dp,
-                                topEnd = if (sheetState == EXPANDED) 16.dp else 28.dp
+                                topStart = cornerRadius,
+                                topEnd = cornerRadius
                             )
                             clip = true
                         },
@@ -302,16 +321,13 @@ fun DetailedAttendanceView(
 
                                             coroutineScope.launch {
                                                 val currentVelocity = velocityTracker
-                                                val velocityThreshold = 250f
-                                                val offsetThreshold = 30f
+                                                // *** DEFINE Thresholds HERE ***
+                                                val velocityDismissThreshold = 350f // Threshold for downward velocity to dismiss
+                                                val offsetDismissThreshold = 80f   // Pixels dragged down to trigger dismiss
 
                                                 when {
-                                                    currentVelocity > velocityThreshold && sheetState == EXPANDED -> {
-                                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                                                        sheetState = HALF_EXPANDED
-                                                    }
-
-                                                    currentVelocity > velocityThreshold * 1.5f && sheetState == HALF_EXPANDED -> {
+                                                    // Condition to dismiss downwards using the defined thresholds
+                                                    currentVelocity > velocityDismissThreshold || dragOffset > offsetDismissThreshold -> {
                                                         hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
                                                         sheetState = HIDDEN
                                                         delay(150)
@@ -320,25 +336,7 @@ fun DetailedAttendanceView(
                                                         onDismiss()
                                                     }
 
-                                                    currentVelocity < -velocityThreshold && sheetState == HALF_EXPANDED -> {
-                                                        hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                                                        sheetState = EXPANDED
-                                                    }
-
-                                                    dragOffset > offsetThreshold && sheetState == EXPANDED -> {
-                                                        sheetState = HALF_EXPANDED
-                                                    }
-                                                    dragOffset < -offsetThreshold && sheetState == HALF_EXPANDED -> {
-                                                        sheetState = EXPANDED
-                                                    }
-                                                    dragOffset > offsetThreshold * 2 && sheetState == HALF_EXPANDED -> {
-                                                        sheetState = HIDDEN
-                                                        delay(150)
-                                                        visible.targetState = false
-                                                        delay(150)
-                                                        onDismiss()
-                                                    }
-
+                                                    // Snap back if not dismissed
                                                     else -> {
                                                         val springSpec = spring<Float>(
                                                             dampingRatio = 0.7f,
@@ -346,15 +344,14 @@ fun DetailedAttendanceView(
                                                         )
                                                         animate(
                                                             initialValue = dragOffset,
-                                                            targetValue = 0f,
+                                                            targetValue = 0f, // Snap back to original position
                                                             animationSpec = springSpec
                                                         ) { value, _ ->
                                                             dragOffset = value
                                                         }
                                                     }
                                                 }
-
-                                                velocityTracker = 0f
+                                                velocityTracker = 0f // Reset velocity tracker
                                             }
                                         },
                                         onDragCancel = {
@@ -372,25 +369,18 @@ fun DetailedAttendanceView(
                                                 }
                                             }
                                         },
-                                        onVerticalDrag = { change, dragAmount ->
-                                            change.consume()
+                                        onVerticalDrag = { change, dragAmount -> change.consume()
+                                            val resistanceFactor = if (dragAmount < 0) 0.3f else 1.0f
 
-                                            val baseResistance = 0.5f
+                                            velocityTracker = 0.75f * velocityTracker + 0.25f * dragAmount * 16f // Keep velocity tracking
 
-                                            val stateResistance = when (sheetState) {
-                                                EXPANDED -> if (dragAmount > 0) 1.0f else 0.0f  // Change 0.3f to 0.0f to prevent upward movement
-                                                HALF_EXPANDED -> if (dragAmount < 0) 0.9f else 0.8f
-                                                else -> 0f
-                                            }
+                                            val newOffset = dragOffset + dragAmount * resistanceFactor
+                                            dragOffset = newOffset
 
-                                            val progressiveFactor = 1.0f - (abs(dragOffset) / 300f).coerceIn(0f, 0.5f)
-
-                                            velocityTracker = 0.75f * velocityTracker + 0.25f * dragAmount * 16f
-
-                                            val effectiveResistance = baseResistance * stateResistance * progressiveFactor
-                                            dragOffset += dragAmount * effectiveResistance
-
-                                            dragOffset = dragOffset.coerceIn(-50f, 150f)
+                                            // *** Clamp dragOffset: Prevent dragging significantly UP ***
+                                            // Allow slight upward bounce (-30f), but allow larger downward drag (e.g., screenHeight * 0.3f)
+                                            val maxDownwardDrag = if (screenHeight > 0) screenHeight * 0.3f else 200f
+                                            dragOffset = dragOffset.coerceIn(-30f, maxDownwardDrag)
                                         }
                                     )
                                 }
