@@ -62,7 +62,7 @@ private val scheduleColorPalette = listOf(
     Color(0xFF4DB6AC),
     Color(0xFFFFF176),
     Color(0xFF90A4AE),
-    Color(0xFFF06292)  // Pink 300
+    Color(0xFFF06292)
     // You can refine this further. Maybe swap one out for a Brown-ish tone if desired.
 )
 @OptIn(

@@ -432,12 +432,18 @@ fun AccountView(
                                                 onClick = {
                                                     hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
                                                     // Trigger dismiss FIRST, then logout
-                                                    dismissSheet()
                                                     coroutineScope.launch {
-                                                        // Delay slightly longer than dismiss animation
-                                                        delay(350)
+                                                        // Set the states directly rather than calling dismissSheet()
+                                                        sheetState = HIDDEN
+                                                        visible.targetState = false
+
+                                                        // Wait for animation to complete
+                                                        delay(300)
+
+                                                        // Handle both dismiss and logout operations
+                                                        onDismiss()
                                                         viewModel.logout()
-                                                        onLogout() // Call logout callback after dismiss animation finishes
+                                                        onLogout()
                                                     }
                                                 },
                                                 modifier = Modifier
