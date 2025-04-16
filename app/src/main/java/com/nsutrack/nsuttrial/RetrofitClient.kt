@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
 
 // Updated RetrofitClient.kt with optimized configuration
 object RetrofitClient {
-    private const val BASE_URL = "http://64.227.161.77:5000"
+    private const val BASE_URL = "http://nsutrack.me:5000"
 
     // Configure OkHttpClient with optimized parameters
     private val okHttpClient by lazy {
