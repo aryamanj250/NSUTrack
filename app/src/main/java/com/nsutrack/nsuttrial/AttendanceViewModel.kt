@@ -195,32 +195,53 @@ class AttendanceViewModel : ViewModel() {
                     // Check for application-level login errors
                     var retryCount = 0
                     var loginErrorFound = false
+                    
+                    Log.d(TAG, "test log: [Refresh] Starting error check loop")
                     while (retryCount < 3 && !loginErrorFound) {
+                        Log.d(TAG, "test log: [Refresh] Error check iteration ${retryCount + 1}/3")
                         delay(300)
-                        val checkSessionId = _sessionId.value ?: break // Use current ID
+                        val checkSessionId = _sessionId.value
+                        if (checkSessionId == null) {
+                            Log.e(TAG, "test log: [Refresh] Session ID became null during error check")
+                            break // Use current ID
+                        }
+                        
+                        Log.d(TAG, "test log: [Refresh] Checking login errors with session ID: $checkSessionId")
                         val errorResponse = apiService.checkLoginErrors(checkSessionId)
+                        Log.d(TAG, "test log: [Refresh] Error response JSON: $errorResponse")
+                        
                         if (errorResponse.has("error")) {
                             val serverErrorMessage = errorResponse.get("error").asString
-                            Log.e(TAG, "[Refresh] Login error reported by server: $serverErrorMessage")
+                            Log.e(TAG, "test log: [Refresh] Login error found: $serverErrorMessage")
                             _errorMessage.value = serverErrorMessage
                             loginErrorFound = true
                             if (errorResponse.has("new_session_id")) {
-                                _sessionId.value = errorResponse.get("new_session_id").asString
-                                Log.d(TAG, "[Refresh] Received new session ID during error check: ${_sessionId.value}")
+                                val newSessionId = errorResponse.get("new_session_id").asString
+                                Log.d(TAG, "test log: [Refresh] Received new session ID during error check: $newSessionId")
+                                _sessionId.value = newSessionId
                             }
                         } else if (errorResponse.has("status") && errorResponse.get("status").asString == "no_errors") {
-                            Log.d(TAG, "[Refresh] No login errors found by server.")
+                            Log.d(TAG, "test log: [Refresh] No login errors found, login confirmed successful")
                             _isLoggedIn.value = true
                             break
+                        } else {
+                            Log.w(TAG, "test log: [Refresh] Unexpected error response format, neither 'error' nor 'status':'no_errors' found")
                         }
                         retryCount++
+                        Log.d(TAG, "test log: [Refresh] Moving to next error check iteration, retryCount=$retryCount")
                     }
+                    
+                    Log.d(TAG, "test log: [Refresh] Error check loop complete. loginErrorFound=$loginErrorFound, isLoggedIn=${_isLoggedIn.value}")
 
                     if (loginErrorFound || !_isLoggedIn.value) { // Check if error found OR login wasn't confirmed
-                        if (!loginErrorFound) _errorMessage.value = "Login verification failed."
+                        if (!loginErrorFound) {
+                            Log.e(TAG, "test log: [Refresh] No explicit error found but login wasn't confirmed either")
+                            _errorMessage.value = "Login verification failed."
+                        }
                         _isLoggedIn.value = false
                         _isLoading.value = false
                         clearAllData()
+                        Log.d(TAG, "test log: [Refresh] Login failed, cleared all data")
                         return@launch
                     }
 
@@ -315,15 +336,6 @@ class AttendanceViewModel : ViewModel() {
     fun login(username: String, password: String) {
         if (_isLoginInProgress.value) return // Prevent multiple login attempts
 
-        _storedUsername.value = username
-        _storedPassword.value = password
-        sharedPreferences?.edit {
-            putString("username", username)
-            putString("password", password)
-            apply()
-            Log.d(TAG, "Stored credentials.")
-        }
-
         activeLoginJob?.cancel() // Cancel previous login attempt
         activeLoginJob = viewModelScope.launch {
             _isLoginInProgress.value = true
@@ -332,23 +344,31 @@ class AttendanceViewModel : ViewModel() {
             _profileError.value = null
             _timetableError.value = null
 
+            Log.d(TAG, "test log: Login function started with username=$username and password length=${password.length}")
+
             try {
                 // Ensure session is initialized
                 if (!_isSessionInitialized.value || _sessionId.value == null) {
-                    Log.d(TAG, "Session not ready for login, initializing...")
+                    Log.d(TAG, "test log: Session not ready for login, initializing...")
                     initializeSession()
                     delay(1500) // Wait for session init
                     if (!_isSessionInitialized.value || _sessionId.value == null) {
+                        Log.e(TAG, "test log: Session initialization failed after wait")
                         throw IOException("Connection error. Please try again.")
                     }
                 }
                 val currentSessionId = _sessionId.value!!
 
-                Log.d(TAG, "Starting login with session ID: $currentSessionId")
+                Log.d(TAG, "test log: Starting login with session ID: $currentSessionId")
                 val loginResponse = apiService.login(
                     LoginRequest(session_id = currentSessionId, uid = username, pwd = password)
                 )
+                
+                Log.d(TAG, "test log: Login HTTP response code: ${loginResponse.code()}")
+                Log.d(TAG, "test log: Login HTTP response is successful: ${loginResponse.isSuccessful}")
+                
                 if (!loginResponse.isSuccessful) {
+                    Log.e(TAG, "test log: Login HTTP request failed with code ${loginResponse.code()}")
                     throw IOException("Login failed (HTTP ${loginResponse.code()})")
                 }
 
@@ -356,59 +376,97 @@ class AttendanceViewModel : ViewModel() {
                 var retryCount = 0
                 var errorFound = false
                 var loggedInConfirmed = false
+                
+                Log.d(TAG, "test log: Starting error check loop")
                 while (retryCount < 3) {
+                    Log.d(TAG, "test log: Error check iteration ${retryCount + 1}/3")
                     delay(300)
-                    val checkSessionId = _sessionId.value ?: break
+                    val checkSessionId = _sessionId.value
+                    
+                    if (checkSessionId == null) {
+                        Log.e(TAG, "test log: Session ID became null during error check")
+                        break
+                    }
+                    
+                    Log.d(TAG, "test log: Checking login errors with session ID: $checkSessionId")
                     val errorResponse = apiService.checkLoginErrors(checkSessionId)
+                    Log.d(TAG, "test log: Error response JSON: $errorResponse")
+                    
                     if (errorResponse.has("error")) {
                         val serverErrorMessage = errorResponse.get("error").asString
-                        Log.e(TAG, "Login error: $serverErrorMessage")
+                        Log.e(TAG, "test log: Login error found: $serverErrorMessage")
                         _errorMessage.value = serverErrorMessage
                         errorFound = true
+                        
                         if (errorResponse.has("new_session_id")) {
-                            _sessionId.value = errorResponse.get("new_session_id").asString
-                            Log.d(TAG, "Received new session ID during error check: ${_sessionId.value}")
+                            val newSessionId = errorResponse.get("new_session_id").asString
+                            Log.d(TAG, "test log: Received new session ID during error check: $newSessionId")
+                            _sessionId.value = newSessionId
                         }
                         break // Treat server error as final
                     } else if (errorResponse.has("status") && errorResponse.get("status").asString == "no_errors") {
-                        Log.d(TAG, "No login errors found.")
+                        Log.d(TAG, "test log: No login errors found, login confirmed successful")
                         loggedInConfirmed = true
                         _isLoggedIn.value = true
                         break
+                    } else {
+                        Log.w(TAG, "test log: Unexpected error response format, neither 'error' nor 'status':'no_errors' found")
                     }
                     retryCount++
+                    Log.d(TAG, "test log: Moving to next error check iteration, retryCount=$retryCount")
                 }
 
+                Log.d(TAG, "test log: Error check loop complete. errorFound=$errorFound, loggedInConfirmed=$loggedInConfirmed")
                 if (errorFound || !loggedInConfirmed) {
-                    if (!errorFound) _errorMessage.value = "Login verification failed."
+                    if (!errorFound) {
+                        Log.e(TAG, "test log: No explicit error found but login wasn't confirmed either")
+                        _errorMessage.value = "Login verification failed."
+                    }
                     _isLoggedIn.value = false
+                    Log.e(TAG, "test log: Final error message: ${_errorMessage.value}")
                     throw IOException(_errorMessage.value.ifEmpty { "Login failed after checks" })
                 }
 
+                // --- Move credential saving here ---
+                Log.d(TAG, "test log: Login successful, saving credentials")
+                _storedUsername.value = username
+                _storedPassword.value = password
+                sharedPreferences?.edit {
+                    putString("username", username)
+                    putString("password", password)
+                    apply()
+                    Log.d(TAG, "test log: Credentials stored successfully")
+                }
+                // --- End credential saving move ---
+
                 // Fetch data sequentially after successful login confirmation
-                Log.d(TAG, "Login successful, fetching data...")
+                Log.d(TAG, "test log: Login successful, beginning data fetch")
                 fetchAttendanceDataInternal() // Fetch attendance first and wait
                 _isAttendanceDataLoaded.value = true // Assume loaded if no exception
+                Log.d(TAG, "test log: Attendance data fetched successfully")
 
                 // Fetch profile and timetable in parallel
+                Log.d(TAG, "test log: Starting parallel fetch of profile and timetable")
                 coroutineScope {
                     val profileJob = async { fetchProfileDataInternal() }
                     val timetableJob = async { fetchTimetableDataInternal(forceRefresh = false) } // No force on initial login
                     profileJob.await()
                     timetableJob.await()
                 }
-                Log.d(TAG, "Initial data fetch complete after login.")
+                Log.d(TAG, "test log: All initial data fetch complete after login")
 
             } catch (e: Exception) {
-                Log.e(TAG, "Login process error: ${e.message}", e)
+                Log.e(TAG, "test log: Login process error: ${e.message}", e)
                 if (_errorMessage.value.isEmpty()) {
                     _errorMessage.value = "Login error: ${e.message?.take(100)}"
                 }
                 _isLoggedIn.value = false
                 clearAllData() // Clear data on login failure
+                Log.d(TAG, "test log: Data cleared after login failure")
             } finally {
                 _isLoginInProgress.value = false
                 _isLoading.value = false // Turn off general loading
+                Log.d(TAG, "test log: Login process complete, isLoggedIn=${_isLoggedIn.value}")
             }
         }
     }
@@ -417,7 +475,7 @@ class AttendanceViewModel : ViewModel() {
     private suspend fun fetchAttendanceDataInternal() {
         val currentJob = activeAttendanceJob
         if (currentJob != null && currentJob.isActive) {
-            Log.d(TAG, "Waiting for existing attendance job to complete.")
+            Log.d(TAG, "test log: Waiting for existing attendance job to complete")
             currentJob.join() // Wait if already running
             return // Don't start a new one if previous one just finished
         }
@@ -426,36 +484,49 @@ class AttendanceViewModel : ViewModel() {
             // No _isLoading manipulation here; caller manages it.
             _isAttendanceDataLoaded.value = false // Reset loaded flag
             try {
-                val currentSessionId = _sessionId.value ?: throw IOException("Session ID missing")
-                Log.d(TAG, "Fetching attendance data with session ID: $currentSessionId")
-
+                val currentSessionId = _sessionId.value
+                if (currentSessionId == null) {
+                    Log.e(TAG, "test log: Session ID is null when trying to fetch attendance")
+                    throw IOException("Session ID missing")
+                }
+                
+                Log.d(TAG, "test log: Fetching attendance data with session ID: $currentSessionId")
                 val attendanceResponse = apiService.getAttendanceData(currentSessionId)
+                Log.d(TAG, "test log: Attendance response code: ${attendanceResponse.code()}, successful: ${attendanceResponse.isSuccessful}, has body: ${attendanceResponse.body() != null}")
+                
                 if (attendanceResponse.isSuccessful && attendanceResponse.body() != null) {
                     val responseBody = attendanceResponse.body()?.string() ?: ""
+                    Log.d(TAG, "test log: Attendance response body length: ${responseBody.length}")
+                    
                     val dataPrefix = "data: "
                     if (responseBody.contains(dataPrefix)) {
                         val jsonData = responseBody.substringAfter(dataPrefix).substringBefore("\n")
+                        Log.d(TAG, "test log: Extracted attendance JSON data, length: ${jsonData.length}")
                         parseAttendanceData(jsonData) // Parse the data
+                        Log.d(TAG, "test log: Attendance data parsed successfully")
                         // _isAttendanceDataLoaded is set based on successful parsing within parseAttendanceData indirectly
                     } else {
+                        Log.e(TAG, "test log: Invalid SSE format - 'data:' prefix not found in response")
                         throw IOException("Invalid SSE format for attendance")
                     }
                 } else {
+                    Log.e(TAG, "test log: Attendance fetch failed with HTTP ${attendanceResponse.code()}")
                     throw IOException("Fetch attendance failed (HTTP ${attendanceResponse.code()})")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error fetching/parsing attendance: ${e.message}")
+                Log.e(TAG, "test log: Error fetching/parsing attendance: ${e.message}")
                 _errorMessage.value = "Error loading attendance: ${e.message?.take(100)}"
                 _subjectData.value = emptyList() // Clear data on error
                 _isAttendanceDataLoaded.value = false
                 throw e // Re-throw to signal failure to caller (e.g., refresh)
             } finally {
                 activeAttendanceJob = null // Clear job reference when done
+                Log.d(TAG, "test log: Attendance fetch job completed, success: ${_isAttendanceDataLoaded.value}")
             }
         }
         activeAttendanceJob = job
         job.join() // Wait for this fetch to complete before proceeding in the calling function
-        Log.d(TAG, "fetchAttendanceDataInternal finished.")
+        Log.d(TAG, "test log: fetchAttendanceDataInternal finished")
     }
 
     // Renamed public function for clarity, delegates to internal
