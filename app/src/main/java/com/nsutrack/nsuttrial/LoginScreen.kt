@@ -97,9 +97,17 @@ fun LoginScreen(
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
     val isAttendanceDataLoaded by viewModel.isAttendanceDataLoaded.collectAsState()
     val sessionId by viewModel.sessionId.collectAsState()
-
+    
     // Determine if login failed based on LoginState
     val hasLoginError = loginState is LoginState.Error
+
+    // NEW: Ensure session is initialized for normal login when screen loads
+    LaunchedEffect(isSessionInitialized) {
+        if (!isSessionInitialized && !isLoading && loginState !is LoginState.Loading) {
+            Log.d("LoginScreen", "Initializing session for normal login flow")
+            viewModel.initializeSession()
+        }
+    }
 
     // Cancel error animation after a short delay
     LaunchedEffect(showErrorAnimation) {
