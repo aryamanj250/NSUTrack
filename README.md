@@ -56,10 +56,6 @@ git clone https://github.com/yourusername/NSUTtrial.git
 
 4. Run the app on your device or emulator
 
-## 📱 Screenshots
-
-[Add your app screenshots here]
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
