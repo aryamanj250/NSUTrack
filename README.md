@@ -1,4 +1,4 @@
-# NSUT Trial 📱
+# NSUTrack 📱
 
 <div align="center">
   <img src="app/src/main/res/drawable/monochrome_icon.png" alt="NSUT Trial Logo" width="1024"/>
