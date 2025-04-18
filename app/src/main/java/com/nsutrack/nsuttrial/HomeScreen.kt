@@ -68,7 +68,7 @@ private val scheduleColorPalette = listOf(
 @OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalFoundationApi::class,
-    ExperimentalMaterialApi::class, ExperimentalMaterialApi::class // OptIn for PullRefresh
+    ExperimentalMaterialApi::class // OptIn for PullRefresh
 )
 @Composable
 fun HomeScreen(
@@ -87,6 +87,8 @@ fun HomeScreen(
     val sessionId by viewModel.sessionId.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val profileData by viewModel.profileData.collectAsState()
+    val loginState by viewModel.loginState.collectAsState()
+    val isLoggedIn by viewModel.isLoggedIn.collectAsState()
     // Specific loading states can be kept if needed for finer-grained UI updates
 
     // --- Pull-to-Refresh State ---
@@ -118,11 +120,11 @@ fun HomeScreen(
     }
 
     // Effect to navigate to login if session is null and no credentials stored
-    LaunchedEffect(key1 = sessionId, key2 = viewModel.hasStoredCredentials()) {
+    LaunchedEffect(key1 = sessionId, key2 = viewModel.hasStoredCredentials(), key3 = loginState) {
         if (sessionId == null && !viewModel.hasStoredCredentials() && !isLoading) {
             Log.d("HomeScreen", "No session or credentials, navigating to login.")
             // Prevent navigation if a login or refresh is already in progress
-            if (!viewModel.isLoginInProgress.value) {
+            if (loginState !is LoginState.Loading) {
                 navController.navigate("login") { popUpTo("home") { inclusive = true } }
             }
         }
@@ -130,6 +132,11 @@ fun HomeScreen(
         else if (sessionId != null && subjectData.isEmpty() && !isLoading && viewModel.hasStoredCredentials()) {
             Log.d("HomeScreen", "Session valid, has credentials, triggering initial load via refresh.")
             viewModel.performPullToRefresh()
+        }
+        // Attempt auto-login if we have credentials but aren't logged in and aren't already trying to login
+        else if (!isLoggedIn && viewModel.hasStoredCredentials() && loginState is LoginState.Idle) {
+            Log.d("HomeScreen", "Has credentials but not logged in, attempting auto-login.")
+            viewModel.attemptAutoLogin()
         }
     }
 

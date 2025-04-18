@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -27,16 +28,27 @@ import com.nsutrack.nsuttrial.navigation.Screen
 import com.nsutrack.nsuttrial.navigation.mainGraph
 import com.nsutrack.nsuttrial.ui.theme.NSUTrackTheme
 import android.graphics.Color
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-         enableEdgeToEdge() // Commented out
+        enableEdgeToEdge() // Commented out
         // WindowCompat.setDecorFitsSystemWindows(window, false) // Commented out
 
         val viewModel = ViewModelProvider(this)[AttendanceViewModel::class.java]
+
+        // Initialize shared preferences first (this will also initialize session if credentials exist)
         viewModel.initializeSharedPreferences(this)
+
+        // After a short delay, attempt auto-login
+        // This delay gives time for session initialization to complete
+        lifecycleScope.launch {
+            delay(500)  // Short delay to ensure session is initialized
+            viewModel.attemptAutoLogin()
+        }
 
         setContent {
             NSUTrackTheme(viewModel = viewModel) {

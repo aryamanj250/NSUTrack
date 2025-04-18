@@ -88,17 +88,18 @@ fun LoginScreen(
         label = "Login Button Error Color"
     )
 
-    // Collect state flows more efficiently
+    // Collect NEW LoginState
+    val loginState by viewModel.loginState.collectAsState()
+
+    // Collect other necessary states
     val isLoading by viewModel.isLoading.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
     val isSessionInitialized by viewModel.isSessionInitialized.collectAsState()
-    val isLoginInProgress by viewModel.isLoginInProgress.collectAsState()
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
     val isAttendanceDataLoaded by viewModel.isAttendanceDataLoaded.collectAsState()
     val sessionId by viewModel.sessionId.collectAsState()
 
-    // Track if there's an error to show red borders
-    val hasError = errorMessage.isNotEmpty()
+    // Determine if login failed based on LoginState
+    val hasLoginError = loginState is LoginState.Error
 
     // Cancel error animation after a short delay
     LaunchedEffect(showErrorAnimation) {
@@ -128,23 +129,31 @@ fun LoginScreen(
         isLoaded = true
     }
 
-    // Navigate on successful attendance data loading with valid session
-    LaunchedEffect(key1 = isAttendanceDataLoaded, key2 = isLoggedIn, key3 = sessionId) {
-        if (isAttendanceDataLoaded && isLoggedIn && sessionId != null) {
-            Log.d("SessionDebug", "Login successful with session ID: $sessionId")
+    // Navigate on successful state from ViewModel (use isLoggedIn, isAttendanceDataLoaded)
+    LaunchedEffect(key1 = isLoggedIn, key2 = isAttendanceDataLoaded, key3 = sessionId) {
+        if (isLoggedIn && isAttendanceDataLoaded && sessionId != null) {
+            Log.d("LoginScreen", "Login confirmed and data loaded, triggering navigation.")
             hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.SUCCESS)
             shouldNavigate = true
         }
     }
 
-    // Error feedback
-    LaunchedEffect(errorMessage) {
-        if (errorMessage.isNotEmpty()) {
-            // Trigger error animation
-            showErrorAnimation = true
-
-            // Error haptic feedback
-            hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.ERROR)
+    // NEW LaunchedEffect to handle LoginState changes
+    LaunchedEffect(loginState) {
+        when (loginState) {
+            is LoginState.Success -> {
+                showErrorAnimation = false
+            }
+            is LoginState.Error -> {
+                showErrorAnimation = true
+                hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.ERROR)
+            }
+            is LoginState.Loading -> {
+                showErrorAnimation = false
+            }
+            is LoginState.Idle -> {
+                showErrorAnimation = false
+            }
         }
     }
 
@@ -153,40 +162,6 @@ fun LoginScreen(
         if (shouldNavigate) {
             delay(300)
             onLoginSuccess()
-        }
-    }
-
-    // Initialize session if needed (only if not already in progress)
-    LaunchedEffect(key1 = isSessionInitialized, key2 = sessionId) {
-        if ((!isSessionInitialized || sessionId == null) && !isLoading) {
-            Log.d("SessionDebug", "Initializing session from LoginScreen")
-            viewModel.initializeSession()
-        }
-    }
-    LaunchedEffect(isSessionInitialized) {
-        if (isSessionInitialized && !isLoading && !isLoginInProgress) {
-            if (viewModel.hasStoredCredentials()) {
-                Log.d("LoginScreen", "Found stored credentials, attempting auto-login")
-
-                // Get stored credentials and use them
-                val credentials = viewModel.getStoredCredentials()
-                credentials?.let { (storedUsername, storedPassword) ->
-                    // Update UI state to match stored credentials
-                    username = storedUsername
-                    password = storedPassword
-
-                    // Delay slightly for better UX
-                    delay(300)
-
-                    // Attempt login with stored credentials
-                    viewModel.login(storedUsername, storedPassword)
-
-                    // Provide subtle feedback
-                    hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
-                }
-            } else {
-                Log.d("LoginScreen", "No stored credentials found")
-            }
         }
     }
 
@@ -236,7 +211,13 @@ fun LoginScreen(
                     // Username field with enhanced animation and error state
                     OutlinedTextField(
                         value = username,
-                        onValueChange = { username = it },
+                        onValueChange = {
+                            username = it
+                            // Clear error state when user starts typing after an error
+                            if (loginState is LoginState.Error) {
+                                viewModel.clearLoginError()
+                            }
+                        },
                         label = { Text(stringResource(R.string.username_label)) },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -249,22 +230,22 @@ fun LoginScreen(
                                 }
                             }
                             .then(
-                                if (hasError) Modifier.border(
+                                if (hasLoginError) Modifier.border(
                                     width = 1.dp,
                                     color = MaterialTheme.colorScheme.error,
                                     shape = RoundedCornerShape(16.dp)
                                 ) else Modifier
                             ),
-                        enabled = isSessionInitialized && !isLoading && !isLoginInProgress,
+                        enabled = isSessionInitialized && !isLoading && loginState !is LoginState.Loading,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                            focusedBorderColor = if (hasLoginError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = if (hasLoginError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
                             disabledBorderColor = MaterialTheme.colorScheme.surfaceVariant,
-                            focusedLabelColor = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            unfocusedLabelColor = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            focusedLabelColor = if (hasLoginError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            unfocusedLabelColor = if (hasLoginError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             cursorColor = MaterialTheme.colorScheme.primary
                         )
                     )
@@ -274,7 +255,13 @@ fun LoginScreen(
                     // Password field with enhanced animation and error state
                     OutlinedTextField(
                         value = password,
-                        onValueChange = { password = it },
+                        onValueChange = {
+                            password = it
+                            // If we had an error and user is typing, reset the form state
+                            if (loginState is LoginState.Error) {
+                                viewModel.resetLoginForm()
+                            }
+                        },
                         label = { Text(stringResource(R.string.password_label)) },
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier
@@ -285,25 +272,29 @@ fun LoginScreen(
                                 isPasswordFocused = it.isFocused
                                 if (it.isFocused) {
                                     hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.LIGHT)
+                                    // Also reset the form if user focuses on password field after an error
+                                    if (loginState is LoginState.Error) {
+                                        viewModel.resetLoginForm()
+                                    }
                                 }
                             }
                             .then(
-                                if (hasError) Modifier.border(
+                                if (hasLoginError) Modifier.border(
                                     width = 1.dp,
                                     color = MaterialTheme.colorScheme.error,
                                     shape = RoundedCornerShape(16.dp)
                                 ) else Modifier
                             ),
-                        enabled = isSessionInitialized && !isLoading && !isLoginInProgress,
+                        enabled = isSessionInitialized && !isLoading && loginState !is LoginState.Loading,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                            focusedBorderColor = if (hasLoginError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = if (hasLoginError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
                             disabledBorderColor = MaterialTheme.colorScheme.surfaceVariant,
-                            focusedLabelColor = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            unfocusedLabelColor = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            focusedLabelColor = if (hasLoginError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            unfocusedLabelColor = if (hasLoginError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             cursorColor = MaterialTheme.colorScheme.primary
                         )
                     )
@@ -315,17 +306,23 @@ fun LoginScreen(
                         onClick = {
                             hapticFeedback.performHapticFeedback(HapticFeedback.FeedbackType.MEDIUM)
                             focusManager.clearFocus()
+
+                            // Clear password field when we have an error and user is trying again
+                            if (loginState is LoginState.Error) {
+                                password = ""
+                            }
+
                             viewModel.login(username, password)
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
                             .scale(loginButtonScale),
-                        enabled = isSessionInitialized && username.isNotEmpty() && password.isNotEmpty() && !isLoading && !isLoginInProgress,
+                        enabled = isSessionInitialized && username.isNotEmpty() && password.isNotEmpty() && !isLoading && loginState !is LoginState.Loading,
                         shape = RoundedCornerShape(28.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = loginButtonColor,
-                            contentColor = if (showErrorAnimation)
+                            contentColor = if (hasLoginError)
                                 MaterialTheme.colorScheme.onErrorContainer
                             else
                                 MaterialTheme.colorScheme.onPrimary,
@@ -337,7 +334,7 @@ fun LoginScreen(
                             pressedElevation = 0.dp
                         )
                     ) {
-                        if (isLoading || isLoginInProgress) {
+                        if (loginState is LoginState.Loading) {
                             CircularProgressIndicator(
                                 color = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(24.dp),
@@ -354,12 +351,13 @@ fun LoginScreen(
 
                     // Error message with animation
                     AnimatedVisibility(
-                        visible = errorMessage.isNotEmpty(),
+                        visible = loginState is LoginState.Error,
                         enter = expandVertically(
                             expandFrom = Alignment.Top,
                             animationSpec = tween(300)
                         ) + fadeIn(animationSpec = tween(300))
                     ) {
+                        val errorMessageText = (loginState as? LoginState.Error)?.message ?: "An error occurred"
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -370,7 +368,7 @@ fun LoginScreen(
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Text(
-                                text = errorMessage,
+                                text = errorMessageText,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.padding(16.dp)
